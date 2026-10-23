@@ -1,3 +1,4 @@
 telethon
 aiohttp
 requests
+edge-tts
