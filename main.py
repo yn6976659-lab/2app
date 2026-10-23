@@ -240,7 +240,6 @@ async def start_anti_disconnect(target_uid, client):
 def _logic(c, u_i):
     def _mk(cid): w_m[f"{u_i}_{cid}"] = datetime.datetime.now(datetime.timezone.utc)
 
-    # LỆNH /help TỰ ĐỘNG HIỂN THỊ TOÀN BỘ CHỨC NĂNG
     @c.on(events.NewMessage(outgoing=True, pattern=r'^(?:/|\.)help$'))
     async def _help_cmd(e):
         help_text = f"""
@@ -517,11 +516,12 @@ async def _callback_handler(ev):
 🆔 **ID:** `{me.id}`
 """
         buttons = [
-            [Button.inline("💬 Gửi Tin Nhắn", data="rmt_send_one"), Button.inline("🥷 Gửi Ẩn Danh (Ghost)", data="rmt_send_ghost")],
-            [Button.inline("📢 Gửi All Nhóm", data="rmt_send_all"), Button.inline("📋 Check Số Nhóm", data="rmt_count_groups")],
-            [Button.inline("📜 Lịch Sử 10 Tin", data="rmt_hist_p1"), Button.inline("🔙 Chọn Acc Khác", data="m_control")]
+            [Button.inline("💬 Gửi Đơn Nhóm / IB", data="rmt_send_one"), Button.inline("🥷 Gửi Ẩn Đơn", data="rmt_send_ghost")],
+            [Button.inline("📢 Gửi All Nhóm (Ai Cùng Thấy)", data="rmt_send_all"), Button.inline("🥷 Gửi Ẩn Danh All Nhóm", data="rmt_send_all_ghost")],
+            [Button.inline("📋 Check Số Nhóm", data="rmt_count_groups"), Button.inline("📜 Lịch Sử 10 Tin", data="rmt_hist_p1")],
+            [Button.inline("🔙 Chọn Acc Khác", data="m_control")]
         ]
-        await ev.edit(txt, buttons=buttons, parse_mode='markdown')
+        await ev.edit(text=txt, buttons=buttons, parse_mode='markdown')
 
     elif data == "rmt_send_one":
         if u not in admins: return
@@ -531,12 +531,12 @@ async def _callback_handler(ev):
         async with bot.conversation(u) as cv:
             await cv.send_message("🎯 **Nhập ID hoặc @username người nhận/nhóm:**")
             chat_target = (await cv.get_response()).text.strip()
-            await cv.send_message("📝 **Nhập nội dung tin nhắn:**")
+            await cv.send_message("📝 **Nhập nội dung tin nhắn gửi bình thường:**")
             msg_text = (await cv.get_response()).text.strip()
             try:
                 chat_entity = int(chat_target) if chat_target.isdigit() or chat_target.startswith("-") else chat_target
                 await u_c[target_uid].send_message(chat_entity, msg_text)
-                await cv.send_message(f"✅ **Đã gửi thành công!**")
+                await cv.send_message(f"✅ **Đã gửi tin nhắn bình thường thành công!**")
             except Exception as ex:
                 await cv.send_message(f"❌ **Lỗi:** `{ex}`")
 
@@ -546,9 +546,9 @@ async def _callback_handler(ev):
         if not target_uid or target_uid not in u_c: return await ev.answer("Tài khoản lỗi!", alert=True)
         await ev.answer()
         async with bot.conversation(u) as cv:
-            await cv.send_message("🎯 **Nhập ID hoặc @username nhóm/chat cần gửi ẩn danh:**")
+            await cv.send_message("🎯 **Nhập ID/@username người nhận/nhóm gửi ẩn:**")
             chat_target = (await cv.get_response()).text.strip()
-            await cv.send_message("📝 **Nhập nội dung tin nhắn ẩn danh:**")
+            await cv.send_message("📝 **Nhập nội dung tin nhắn Ẩn Danh:**")
             msg_text = (await cv.get_response()).text.strip()
             try:
                 chat_entity = int(chat_target) if chat_target.isdigit() or chat_target.startswith("-") else chat_target
@@ -557,17 +557,18 @@ async def _callback_handler(ev):
                 try:
                     await client.delete_messages(chat_entity, [sent_msg.id], revoke=False)
                 except: pass
-                await cv.send_message(f"✅ **Đã gửi ẩn danh thành công!**")
+                await cv.send_message(f"✅ **Đã gửi Ẩn Danh thành công!**")
             except Exception as ex:
                 await cv.send_message(f"❌ **Lỗi:** `{ex}`")
 
+    # GỬI THƯỜNG TOÀN BỘ NHÓM (AI CŨNG THẤY)
     elif data == "rmt_send_all":
         if u not in admins: return
         target_uid = admin_selected_target.get(u)
         if not target_uid or target_uid not in u_c: return await ev.answer("Tài khoản lỗi!", alert=True)
         await ev.answer()
         async with bot.conversation(u) as cv:
-            await cv.send_message("📢 **Nhập nội dung gửi TẤT CẢ các nhóm:**")
+            await cv.send_message("📢 **Nhập nội dung gửi TẤT CẢ các nhóm (Thường):**")
             msg_text = (await cv.get_response()).text.strip()
             client = u_c[target_uid]
             await cv.send_message("⏳ Đang tiến hành gửi...")
@@ -582,12 +583,37 @@ async def _callback_handler(ev):
                     except: fail += 1
             await cv.send_message(f"✅ **Đã gửi xong!** Thành công: `{success}` | Thất bại: `{fail}`")
 
+    # GỬI ẨN DANH TOÀN BỘ NHÓM (NGƯỜI NGOÀI TRONG NHÓM AI CŨNG THẤY, PHÍA TÀI KHOẢN MÌNH XÓA)
+    elif data == "rmt_send_all_ghost":
+        if u not in admins: return
+        target_uid = admin_selected_target.get(u)
+        if not target_uid or target_uid not in u_c: return await ev.answer("Tài khoản lỗi!", alert=True)
+        await ev.answer()
+        async with bot.conversation(u) as cv:
+            await cv.send_message("🥷 **Nhập nội dung gửi ẨN DANH tới TẤT CẢ các nhóm:**")
+            msg_text = (await cv.get_response()).text.strip()
+            client = u_c[target_uid]
+            await cv.send_message("⏳ Đang tiến hành gửi ẩn danh đa nhóm...")
+            success, fail = 0, 0
+            dialogs = await client.get_dialogs(limit=100)
+            for d in dialogs:
+                if d.is_group or d.is_channel:
+                    try:
+                        sent_msg = await client.send_message(d.id, msg_text)
+                        try:
+                            await client.delete_messages(d.id, [sent_msg.id], revoke=False)
+                        except: pass
+                        success += 1
+                        await asyncio.sleep(1)
+                    except: fail += 1
+            await cv.send_message(f"✅ **Đã gửi Ẩn Danh Đa Nhóm xong!** Thành công: `{success}` | Thất bại: `{fail}`")
+
     elif data == "rmt_count_groups":
         if u not in admins: return
         target_uid = admin_selected_target.get(u)
         if not target_uid or target_uid not in u_c: return await ev.answer("Tài khoản lỗi!", alert=True)
         client = u_c[target_uid]
-        await ev.answer("⏳ Đang quét toàn bộ nhóm/kênh...", alert=True)
+        await ev.answer("⏳ Đang quét toàn bộ danh sách...", alert=True)
         try:
             dialogs = await client.get_dialogs()
             groups_count, channels_count, private_count = 0, 0, 0
@@ -595,12 +621,13 @@ async def _callback_handler(ev):
                 if d.is_group: groups_count += 1
                 elif d.is_channel: channels_count += 1
                 elif d.is_user: private_count += 1
+
             text = f"""📊 **THỐNG KÊ CHI TIẾT TÀI KHOẢN:**
 ────────────────
 • Tổng số đoạn chat: `{len(dialogs)}`
 • Số Nhóm (Groups): `{groups_count}`
 • Số Kênh (Channels): `{channels_count}`
-• Số Chat Riêng (Private): `{private_count}`
+• Số Người Cùng IB (Private): `{private_count}`
 """
             await ev.edit(text, buttons=[[Button.inline("🔙 Trở Về", data=f"sel_acc_{target_uid}")]], parse_mode='markdown')
         except Exception as ex:
@@ -885,3 +912,4 @@ if __name__ == '__main__':
         asyncio.run(main())
     except (KeyboardInterrupt, SystemExit):
         pass
+legra
