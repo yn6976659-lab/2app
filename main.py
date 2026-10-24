@@ -1128,7 +1128,6 @@ async def _callback_handler(ev):
             g_username = username_match.group(1)
             g_link = raw_link if raw_link.startswith("http") else f"https://t.me/{g_username}"
 
-            # Thêm vào danh sách
             global REQUIRED_GROUPS
             REQUIRED_GROUPS.append({
                 "username": g_username,
@@ -1162,8 +1161,15 @@ async def _callback_handler(ev):
         else:
             await ev.answer("❌ Nhóm không tồn tại hoặc đã bị xóa!", alert=True)
         
-        # Trở về danh sách admin menu
-        txt = "👑 **ADMIN SYSTEM MANAGEMENT**\n────────────────\n• `/ban <id>`\n• `/unban <id>`\n• `/addadmin <id>`\n• `/addvip <id>`\n• `/delvip <id>`\n• `/tb <nội dung>`"
+        txt = """👑 **ADMIN SYSTEM MANAGEMENT**
+────────────────
+• `/ban <id>` - Ban người dùng
+• `/unban <id>` - Gỡ ban
+• `/addadmin <id>` - Thêm admin
+• `/addvip <id>` - Thêm VIP
+• `/delvip <id>` - Xóa VIP
+• `/tb <nội dung>` - Gửi thông báo
+"""
         buttons = [
             [Button.inline("➕ Thêm Nhóm Bắt Buộc", data="adm_add_group"), Button.inline("🗑 Xóa Nhóm Bắt Buộc", data="adm_del_group")],
             [Button.inline("📋 Danh Sách Nhóm Bắt Buộc", data="adm_list_groups")],
@@ -1324,3 +1330,4 @@ if __name__ == '__main__':
         asyncio.run(main())
     except (KeyboardInterrupt, SystemExit):
         pass
+g
