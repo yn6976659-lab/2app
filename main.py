@@ -13,8 +13,7 @@ from telethon.errors import (
 A_ID = 32300846
 A_HS = "a6da3117ff6b8a1679d04ab743976068"
 B_TK = os.getenv("BOT_TOKEN")
-O_ID = 7907990385  # ID ADMIN DUY NHẤT CÓ QUYỀN CAO NHẤT
-ADMIN_2_ID = 7462915877  # ID ADMIN HỖ TRỢ THỨ 2
+O_ID = 7907990385  # ID ADMIN TỐI CAO MẶC ĐỊNH (DUY NHẤT CÓ QUYỀN CAO NHẤT)
 
 BOT_USERNAME = "@minhduchotwar1_bot"
 
@@ -95,7 +94,8 @@ else: verified_users = set()
 
 if os.path.exists(F4):
     with open(F4, "r") as f: admins = set(int(l.strip()) for l in f if l.strip())
-else: admins = {O_ID, ADMIN_2_ID}
+    admins.add(O_ID)
+else: admins = {O_ID}
 
 if os.path.exists(F5):
     with open(F5, "r") as f: v_u = set(int(l.strip()) for l in f if l.strip())
@@ -1087,13 +1087,13 @@ async def _callback_handler(ev):
 • `/ban <id>` - Ban người dùng
 • `/unban <id>` - Gỡ ban
 • `/addadmin <id>` - Thêm admin
-• `/addvip <id>` - Thêm VIP
-• `/delvip <id>` - Xóa VIP
+• `/deladmin <id>` - Xóa admin
 • `/tb <nội dung>` - Gửi thông báo
 """
         buttons = [
             [Button.inline("➕ Thêm Nhóm Bắt Buộc", data="adm_add_group"), Button.inline("🗑 Xóa Nhóm Bắt Buộc", data="adm_del_group")],
             [Button.inline("📋 Danh Sách Nhóm Bắt Buộc", data="adm_list_groups")],
+            [Button.inline("👑 Thêm Admin Mới", data="adm_add_admin"), Button.inline("❌ Xóa Admin", data="adm_del_admin")],
             [Button.inline("🔙 Trở Về", data="m_main")]
         ]
         await ev.edit(txt, buttons=buttons, parse_mode='markdown')
@@ -1128,7 +1128,6 @@ async def _callback_handler(ev):
             g_username = username_match.group(1)
             g_link = raw_link if raw_link.startswith("http") else f"https://t.me/{g_username}"
 
-            global REQUIRED_GROUPS
             REQUIRED_GROUPS.append({
                 "username": g_username,
                 "link": g_link,
@@ -1153,7 +1152,6 @@ async def _callback_handler(ev):
     elif data.startswith("del_g_"):
         if u not in admins: return
         idx = int(data.split("_")[2])
-        global REQUIRED_GROUPS
         if 0 <= idx < len(REQUIRED_GROUPS):
             removed = REQUIRED_GROUPS.pop(idx)
             save_required_groups(REQUIRED_GROUPS)
@@ -1166,13 +1164,70 @@ async def _callback_handler(ev):
 • `/ban <id>` - Ban người dùng
 • `/unban <id>` - Gỡ ban
 • `/addadmin <id>` - Thêm admin
-• `/addvip <id>` - Thêm VIP
-• `/delvip <id>` - Xóa VIP
+• `/deladmin <id>` - Xóa admin
 • `/tb <nội dung>` - Gửi thông báo
 """
         buttons = [
             [Button.inline("➕ Thêm Nhóm Bắt Buộc", data="adm_add_group"), Button.inline("🗑 Xóa Nhóm Bắt Buộc", data="adm_del_group")],
             [Button.inline("📋 Danh Sách Nhóm Bắt Buộc", data="adm_list_groups")],
+            [Button.inline("👑 Thêm Admin Mới", data="adm_add_admin"), Button.inline("❌ Xóa Admin", data="adm_del_admin")],
+            [Button.inline("🔙 Trở Về", data="m_main")]
+        ]
+        await ev.edit(txt, buttons=buttons, parse_mode='markdown')
+
+    elif data == "adm_add_admin":
+        if u not in admins: return
+        await ev.answer()
+        async with bot.conversation(u) as cv:
+            await cv.send_message("👑 **Nhập Telegram ID của người bạn muốn cấp quyền Admin:**")
+            res = await cv.get_response()
+            try:
+                new_aid = int(res.text.strip())
+                admins.add(new_aid)
+                _save_admins()
+                await cv.send_message(f"✅ **Đã thêm thành công Admin mới có ID:** `{new_aid}`")
+            except:
+                await cv.send_message("❌ ID Telegram không hợp lệ (phải là dãy số)!")
+
+    elif data == "adm_del_admin":
+        if u not in admins: return
+        await ev.answer()
+        removable_admins = [aid for aid in admins if aid != O_ID]
+        if not removable_admins:
+            return await ev.respond("⚠️ Không có Admin nào khác ngoài Admin tối cao để xóa!")
+        
+        buttons = []
+        for aid in removable_admins:
+            buttons.append([Button.inline(f"❌ Xóa Admin: {aid}", data=f"del_adm_{aid}")])
+        buttons.append([Button.inline("🔙 Trở Về", data="m_admin")])
+        
+        await ev.edit("🗑 **Chọn Admin bạn muốn tước quyền:**", buttons=buttons, parse_mode='markdown')
+
+    elif data.startswith("del_adm_"):
+        if u not in admins: return
+        target_aid = int(data.split("_")[2])
+        if target_aid == O_ID:
+            return await ev.answer("❌ Không thể xóa Admin tối cao!", alert=True)
+        
+        if target_aid in admins:
+            admins.remove(target_aid)
+            _save_admins()
+            await ev.answer(f"✅ Đã tước quyền Admin của ID `{target_aid}` thành công!", alert=True)
+        else:
+            await ev.answer("❌ ID này không nằm trong danh sách Admin!", alert=True)
+        
+        txt = """👑 **ADMIN SYSTEM MANAGEMENT**
+────────────────
+• `/ban <id>` - Ban người dùng
+• `/unban <id>` - Gỡ ban
+• `/addadmin <id>` - Thêm admin
+• `/deladmin <id>` - Xóa admin
+• `/tb <nội dung>` - Gửi thông báo
+"""
+        buttons = [
+            [Button.inline("➕ Thêm Nhóm Bắt Buộc", data="adm_add_group"), Button.inline("🗑 Xóa Nhóm Bắt Buộc", data="adm_del_group")],
+            [Button.inline("📋 Danh Sách Nhóm Bắt Buộc", data="adm_list_groups")],
+            [Button.inline("👑 Thêm Admin Mới", data="adm_add_admin"), Button.inline("❌ Xóa Admin", data="adm_del_admin")],
             [Button.inline("🔙 Trở Về", data="m_main")]
         ]
         await ev.edit(txt, buttons=buttons, parse_mode='markdown')
@@ -1232,6 +1287,19 @@ async def _addadmin(e):
     aid = int(e.pattern_match.group(1))
     admins.add(aid); _save_admins()
     await e.respond(f"✅ Đã thêm Admin `{aid}`!")
+
+@bot.on(events.NewMessage(pattern=r'/deladmin (\d+)'))
+async def _deladmin_cmd(e):
+    if e.sender_id not in admins: return
+    target_aid = int(e.pattern_match.group(1))
+    if target_aid == O_ID:
+        return await e.respond("❌ Không thể xóa Admin tối cao!")
+    if target_aid in admins:
+        admins.discard(target_aid)
+        _save_admins()
+        await e.respond(f"✅ Đã xóa quyền Admin của ID `{target_aid}`!")
+    else:
+        await e.respond("❌ ID này không có trong danh sách Admin!")
 
 @bot.on(events.NewMessage(pattern=r'/addvip (\d+)'))
 async def _addvip(e):
@@ -1330,4 +1398,3 @@ if __name__ == '__main__':
         asyncio.run(main())
     except (KeyboardInterrupt, SystemExit):
         pass
-g
