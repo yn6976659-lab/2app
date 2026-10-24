@@ -1,5 +1,4 @@
 import asyncio, os, random, datetime, re, glob, requests, json, base64, time, edge_tts
-from dotenv import load_dotenv
 from aiohttp import web, ClientSession
 from telethon import TelegramClient, events, Button, functions, types
 from telethon.errors import (
@@ -8,14 +7,12 @@ from telethon.errors import (
     PhoneCodeExpiredError, PhoneNumberInvalidError, PasswordHashInvalidError
 )
 
-# Load file .env
-load_dotenv()
-
 # ==========================================
 # CẤU HÌNH HỆ THỐNG
 # ==========================================
 A_ID = 32300846
 A_HS = "a6da3117ff6b8a1679d04ab743976068"
+# Lấy Bot Token trực tiếp từ Environment Variables trên Render
 B_TK = os.getenv("BOT_TOKEN")
 O_ID = 7907990385
 BOT_USERNAME = "@minhduchotwar1_bot"
@@ -916,4 +913,4 @@ if __name__ == '__main__':
         asyncio.run(main())
     except (KeyboardInterrupt, SystemExit):
         pass
-f
+data
